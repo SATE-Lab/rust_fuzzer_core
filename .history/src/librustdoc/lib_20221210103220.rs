@@ -721,7 +721,7 @@ fn main_args(at_args: &[String]) -> MainResult {
 
     // Note that we discard any distinction between different non-zero exit
     // codes from `from_matches` here.
-    let (options, render_options) = match config::Options::from_matches(&matches, args) {
+    let (options, render_options) = match config::Options::from_matches(&&matches, args) {
         Ok(opts) => opts,
         Err(code) => {
             return if code == 0 {

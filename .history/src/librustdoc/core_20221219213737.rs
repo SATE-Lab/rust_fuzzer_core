@@ -370,7 +370,7 @@ pub(crate) fn run_global_ctxt(
     for (ident, hir_id) in &visitor.items {
         let is_function = hir.fn_sig_by_hir_id(hir_id.clone());
         match is_function {
-            Some(_) => {
+            Some(sig_fn) => {
                 function_name_list.push(ident.clone());
             }
             None => {}

@@ -31,7 +31,7 @@ extern crate tracing;
 // So if `rustc` was specified in Cargo.toml, this would spuriously rebuild crates.
 //
 // Dependencies listed in Cargo.toml do not need `extern crate`.
-
+#[allow(unresolved_extern_crates)]
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
 extern crate rustc_attr;

@@ -19,6 +19,7 @@ use rustc_session::Session;
 use rustc_span::symbol::sym;
 use rustc_span::{source_map, Span, Symbol};
 
+use std::any::Any;
 use std::cell::RefCell;
 use std::mem;
 use std::rc::Rc;
@@ -322,7 +323,7 @@ pub struct FnSignatureVisitor {
 
 impl FnSignatureVisitor {
     fn new() -> FnSignatureVisitor {
-        FnSignatureVisitor { items: FxHashMap::default() }
+        FnSignatureVisitor { items: FxHashMap::new() }
     }
 }
 
@@ -360,6 +361,7 @@ pub(crate) fn run_global_ctxt(
 
     // ************************************************************************************
     let hir = tcx.hir();
+    let krate = hir.krate();
     let hir_items = hir.items();
     let mut visitor = FnSignatureVisitor::new();
     for itemid in hir_items {
@@ -370,16 +372,14 @@ pub(crate) fn run_global_ctxt(
     for (ident, hir_id) in &visitor.items {
         let is_function = hir.fn_sig_by_hir_id(hir_id.clone());
         match is_function {
-            Some(_) => {
+            Some(sig_fn) => {
                 function_name_list.push(ident.clone());
             }
             None => {}
         };
     }
     function_name_list.sort();
-    for func in function_name_list {
-        println!("{}", func);
-    }
+    for func in function_name_list {}
 
     // ************************************************************************************
 

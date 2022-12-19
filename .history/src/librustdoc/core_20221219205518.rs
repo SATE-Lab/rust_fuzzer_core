@@ -316,23 +316,6 @@ pub(crate) fn create_config(
     }
 }
 
-pub struct FnSignatureVisitor {
-    items: FxHashMap<String, HirId>,
-}
-
-impl FnSignatureVisitor {
-    fn new() -> FnSignatureVisitor {
-        FnSignatureVisitor { items: FxHashMap::default() }
-    }
-}
-
-impl<'v> Visitor<'v> for FnSignatureVisitor {
-    fn visit_item(&mut self, item: &'v rustc_hir::Item<'v>) {
-        self.items.insert(item.ident.to_string(), item.hir_id());
-        println!("visit: {}", item.ident.to_string());
-    }
-}
-
 pub(crate) fn run_global_ctxt(
     tcx: TyCtxt<'_>,
     resolver: Rc<RefCell<interface::BoxedResolver>>,
@@ -358,30 +341,17 @@ pub(crate) fn run_global_ctxt(
     });
     tcx.sess.abort_if_errors();
 
-    // ************************************************************************************
-    let hir = tcx.hir();
-    let hir_items = hir.items();
-    let mut visitor = FnSignatureVisitor::new();
-    for itemid in hir_items {
-        let item = hir.item(itemid);
-        visitor.visit_item(item);
-    }
     let mut function_name_list = Vec::new();
     for (ident, hir_id) in &visitor.items {
         let is_function = hir.fn_sig_by_hir_id(hir_id.clone());
         match is_function {
-            Some(_) => {
+            Some(sig_fn) => {
                 function_name_list.push(ident.clone());
             }
             None => {}
         };
     }
     function_name_list.sort();
-    for func in function_name_list {
-        println!("{}", func);
-    }
-
-    // ************************************************************************************
 
     tcx.sess.time("missing_docs", || {
         rustc_lint::check_crate(tcx, rustc_lint::builtin::MissingDoc::new);

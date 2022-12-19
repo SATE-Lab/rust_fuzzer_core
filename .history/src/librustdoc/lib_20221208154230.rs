@@ -176,8 +176,7 @@ pub fn main() {
     process::exit(exit_code);
 }
 
-#[allow(dead_code)]
-fn target_generator_main() {}
+pub fn fuzz_targets_gen() {}
 
 fn init_logging() {
     let color_logs = match std::env::var("RUSTDOC_LOG_COLOR").as_deref() {

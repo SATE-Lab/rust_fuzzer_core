@@ -371,7 +371,7 @@ pub(crate) fn run_global_ctxt(
         let is_function = hir.fn_sig_by_hir_id(hir_id.clone());
         match is_function {
             Some(_) => {
-                function_name_list.push(ident.clone());
+                function_name_list.push(sig_fn..clone());
             }
             None => {}
         };

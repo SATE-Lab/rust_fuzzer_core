@@ -176,7 +176,7 @@ pub fn main() {
     process::exit(exit_code);
 }
 
-#[allow(dead_code)]
+#[dead_code]
 fn target_generator_main() {}
 
 fn init_logging() {
