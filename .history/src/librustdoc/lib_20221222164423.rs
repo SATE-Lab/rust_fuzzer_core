@@ -114,9 +114,6 @@ mod formats;
 // used by the error-index generator, so it needs to be public
 pub mod html;
 mod json;
-
-mod fuzz_targets_gen;
-
 pub(crate) mod lint;
 mod markdown;
 mod passes;
@@ -861,12 +858,7 @@ fn main_args(at_args: &[String]) -> MainResult {
                         run_renderer::<json::JsonRenderer<'_>>(krate, render_opts, cache, tcx)
                     }),
                     config::OutputFormat::TarGen => sess.time("target_generator", || {
-                        run_renderer::<fuzz_targets_gen::Context<'_>>(
-                            krate,
-                            render_opts,
-                            cache,
-                            tcx,
-                        )
+                        run_renderer::<fuzz_targets_gen::Renderer<\_>>(krate, renderopts, cache, tcx)
                     }),
                 }
             })

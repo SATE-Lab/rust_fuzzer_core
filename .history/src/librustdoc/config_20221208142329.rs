@@ -35,7 +35,6 @@ use crate::theme;
 pub(crate) enum OutputFormat {
     Json,
     Html,
-    TarGen,
 }
 
 impl Default for OutputFormat {
@@ -57,7 +56,6 @@ impl TryFrom<&str> for OutputFormat {
         match value {
             "json" => Ok(OutputFormat::Json),
             "html" => Ok(OutputFormat::Html),
-            "targen" => Ok(OutputFormat::TarGen),
             _ => Err(format!("unknown output format `{}`", value)),
         }
     }

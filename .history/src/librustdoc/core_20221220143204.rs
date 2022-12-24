@@ -330,8 +330,7 @@ impl FnSignatureVisitor {
 impl<'v> Visitor<'v> for FnSignatureVisitor {
     fn visit_item(&mut self, item: &'v rustc_hir::Item<'v>) {
         self.items.insert(item.ident.to_string(), item.hir_id());
-        println!("ident: {}", item.ident.to_string());
-        println!("visit item: {:#?}\n", item.kind);
+        println!("visit item: {}", item.kind);
     }
 }
 //******************************** */
@@ -361,7 +360,6 @@ pub(crate) fn run_global_ctxt(
     tcx.sess.abort_if_errors();
 
     // ************************************************************************************
-    //println!("123");
     let hir = tcx.hir();
     let hir_items = hir.items();
     let mut visitor = FnSignatureVisitor::new();
@@ -369,20 +367,19 @@ pub(crate) fn run_global_ctxt(
         let item = hir.item(itemid);
         visitor.visit_item(item);
     }
-    let mut function_list = FxHashMap::default();
+    let mut function_name_list = Vec::new();
     for (ident, hir_id) in &visitor.items {
         let is_function = hir.fn_sig_by_hir_id(hir_id.clone());
         match is_function {
-            Some(fn_sg) => {
-                function_list.insert(ident, fn_sg);
-                //println!("{:?}", fn_sg);
+            Some(_) => {
+                function_name_list.push(ident.clone());
             }
             None => {}
         };
     }
-    println!("Functions: ");
-    for (ident, func) in function_list {
-        println!("find func {}:\n {:#?}", ident, func);
+    function_name_list.sort();
+    for func in function_name_list {
+        println!("{}", func);
     }
 
     // ************************************************************************************

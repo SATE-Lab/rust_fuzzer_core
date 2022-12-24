@@ -331,7 +331,7 @@ impl<'v> Visitor<'v> for FnSignatureVisitor {
     fn visit_item(&mut self, item: &'v rustc_hir::Item<'v>) {
         self.items.insert(item.ident.to_string(), item.hir_id());
         println!("ident: {}", item.ident.to_string());
-        println!("visit item: {:#?}\n", item.kind);
+        println!("visit item: {:?}", item.kind);
     }
 }
 //******************************** */
@@ -361,7 +361,7 @@ pub(crate) fn run_global_ctxt(
     tcx.sess.abort_if_errors();
 
     // ************************************************************************************
-    //println!("123");
+    println!("123");
     let hir = tcx.hir();
     let hir_items = hir.items();
     let mut visitor = FnSignatureVisitor::new();
@@ -375,14 +375,14 @@ pub(crate) fn run_global_ctxt(
         match is_function {
             Some(fn_sg) => {
                 function_list.insert(ident, fn_sg);
-                //println!("{:?}", fn_sg);
+                println!("{:?}", fn_sg);
             }
             None => {}
         };
     }
     println!("Functions: ");
-    for (ident, func) in function_list {
-        println!("find func {}:\n {:#?}", ident, func);
+    for func in function_list {
+        println!("find func:\n {:?}", func);
     }
 
     // ************************************************************************************

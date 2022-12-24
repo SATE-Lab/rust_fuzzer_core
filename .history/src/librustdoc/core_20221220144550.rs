@@ -8,7 +8,7 @@ use rustc_feature::UnstableFeatures;
 use rustc_hir::def::{Namespace, Res};
 use rustc_hir::def_id::{DefId, DefIdMap, LocalDefId};
 use rustc_hir::intravisit::{self, Visitor};
-use rustc_hir::{HirId, Path, TraitCandidate};
+use rustc_hir::{FnSig, HirId, Path, TraitCandidate};
 use rustc_interface::interface;
 use rustc_middle::hir::nested_filter;
 use rustc_middle::ty::{ParamEnv, Ty, TyCtxt};
@@ -330,8 +330,7 @@ impl FnSignatureVisitor {
 impl<'v> Visitor<'v> for FnSignatureVisitor {
     fn visit_item(&mut self, item: &'v rustc_hir::Item<'v>) {
         self.items.insert(item.ident.to_string(), item.hir_id());
-        println!("ident: {}", item.ident.to_string());
-        println!("visit item: {:#?}\n", item.kind);
+        println!("visit item: {:?}", item.kind);
     }
 }
 //******************************** */
@@ -361,7 +360,6 @@ pub(crate) fn run_global_ctxt(
     tcx.sess.abort_if_errors();
 
     // ************************************************************************************
-    //println!("123");
     let hir = tcx.hir();
     let hir_items = hir.items();
     let mut visitor = FnSignatureVisitor::new();
@@ -369,20 +367,18 @@ pub(crate) fn run_global_ctxt(
         let item = hir.item(itemid);
         visitor.visit_item(item);
     }
-    let mut function_list = FxHashMap::default();
-    for (ident, hir_id) in &visitor.items {
+    let mut function_name_list = Vec::new();
+    for (_, hir_id) in &visitor.items {
         let is_function = hir.fn_sig_by_hir_id(hir_id.clone());
         match is_function {
             Some(fn_sg) => {
-                function_list.insert(ident, fn_sg);
-                //println!("{:?}", fn_sg);
+                function_name_list.push(fn_sg);
             }
             None => {}
         };
     }
-    println!("Functions: ");
-    for (ident, func) in function_list {
-        println!("find func {}:\n {:#?}", ident, func);
+    for func in function_name_list {
+        println!("find func:\n {:?}", func);
     }
 
     // ************************************************************************************

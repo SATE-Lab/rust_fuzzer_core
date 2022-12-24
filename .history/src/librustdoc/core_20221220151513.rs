@@ -361,7 +361,7 @@ pub(crate) fn run_global_ctxt(
     tcx.sess.abort_if_errors();
 
     // ************************************************************************************
-    //println!("123");
+    println!("123");
     let hir = tcx.hir();
     let hir_items = hir.items();
     let mut visitor = FnSignatureVisitor::new();

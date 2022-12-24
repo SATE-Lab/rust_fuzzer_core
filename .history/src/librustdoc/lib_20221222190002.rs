@@ -861,7 +861,7 @@ fn main_args(at_args: &[String]) -> MainResult {
                         run_renderer::<json::JsonRenderer<'_>>(krate, render_opts, cache, tcx)
                     }),
                     config::OutputFormat::TarGen => sess.time("target_generator", || {
-                        run_renderer::<fuzz_targets_gen::Context<'_>>(
+                        run_renderer::<fuzz_targets_gen::TargetGenerator<'_>>(
                             krate,
                             render_opts,
                             cache,
