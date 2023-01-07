@@ -1,16 +1,16 @@
-use bit_vec::BitVec;
+use std::collections::hash_map::Entry;
+use std::default::Default;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::def;
 use rustc_hir::def_id::DefId;
 use rustc_index::vec::IndexVec;
 use rustc_middle::mir;
 use rustc_middle::mir::terminator::*;
-use rustc_middle::mir::Constant;
 use rustc_middle::mir::TerminatorKind;
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_span::symbol::Symbol;
-use std::collections::hash_map::Entry;
-use std::default::Default;
+use bit_vec::BitVec;
+use rustc_middle::mir::Constant;
 
 /// 一个mir::Body中每个变量的依赖图，利用二维数组来存储
 /// 在这个结构里实现了相关的计算操作
@@ -31,6 +31,7 @@ pub struct LocalDependencies<'tcx> {
     constants: Vec<mir::Constant<'tcx>>,
     arg_count: usize,
 }
+
 
 #[derive(Debug, Clone)]
 pub struct AllDependencies<'tcx> {
@@ -80,6 +81,7 @@ enum Callee<'tcx> {
     LocalFunctionPtr(Vec<Source<'tcx>>),
 }
 
+
 /// Dependencies of a given local
 ///
 /// Note: we could also track special constants, other than functions
@@ -95,6 +97,8 @@ pub enum Source<'tcx> {
     ReturnVariable(DefId),
 }
 
+
+
 //以来的类型，用于LocalDependencies;;dependencies(local)的返回值
 #[derive(Debug, Clone)]
 pub enum DependencyType<'tcx> {
@@ -104,10 +108,12 @@ pub enum DependencyType<'tcx> {
     Constant(Constant<'tcx>),
 }
 
+
 /// direct_dependencies: 用来获得直接依赖
 /// propagate: 将直接依赖传递，用来计算间接依赖
 /// dependencies(local): 获取某个局部变量local的依赖
 impl<'tcx> LocalDependencies<'tcx> {
+
     fn compute<'mir>(function_body: &'mir mir::Body<'tcx>) -> Self {
         Self::direct_dependencies(function_body).propagate()
     }
@@ -218,6 +224,7 @@ impl<'tcx> LocalDependencies<'tcx> {
         let mut search_constants = Assignments::new(locals_count, &constants, &mut dependencies);
         search_constants.visit_body(function_body);
 
+
         LocalDependencies { dependencies, constants, arg_count: function_body.arg_count }
     }
 
@@ -277,7 +284,7 @@ impl<'tcx> LocalDependencies<'tcx> {
             let (deps1, right) = rest.split_first_mut().unwrap();
             let other_dependencies = Iterator::chain(
                 left.iter().enumerate(),
-                right.iter().enumerate().map(|(i, x)| (i + 1 + left.len(), x)),
+                right.iter().enumerate().map(|(i, x)| (i + 1+left.len(), x)), 
             );
 
             loop {
@@ -306,6 +313,9 @@ impl<'tcx> LocalDependencies<'tcx> {
         LocalDependencies { dependencies, constants, arg_count }
     }
 
+
+
+
     /// Return all the dependencies to `local`
     fn dependencies(&self, local: mir::Local) -> impl Iterator<Item = DependencyType<'tcx>> + '_ {
         self.dependencies[local]
@@ -329,12 +339,11 @@ impl<'tcx> LocalDependencies<'tcx> {
     }
 }
 
-fn _print_dependencies(dep: &IndexVec<mir::Local, BitVec>, s: &str) {
-    println!("\nBegin to print dependencies, {}, num of local is {}", s, dep.len());
-    if dep.len() > 10 {
-        return;
-    }
 
+fn _print_dependencies(dep : &IndexVec<mir::Local, BitVec>, s: &str){
+    println!("\nBegin to print dependencies, {}, num of local is {}", s, dep.len());
+    if dep.len()>10{return;}
+    
     for local_vec in dep {
         for elem in local_vec {
             print!("{} ", elem);
@@ -343,6 +352,7 @@ fn _print_dependencies(dep: &IndexVec<mir::Local, BitVec>, s: &str) {
     }
     println!("End printing");
 }
+
 
 /// 解析函数Body里面的const，返回一个mir::Constant向量
 fn extract_constant<'tcx>(function: &mir::Body<'tcx>) -> Vec<mir::Constant<'tcx>> {
@@ -363,6 +373,14 @@ fn extract_constant<'tcx>(function: &mir::Body<'tcx>) -> Vec<mir::Constant<'tcx>
     search_constants.constants
 }
 
+
+
+
+
+
+
+
+
 /// 函数调用点，通过extract_function_call进行解析获得caller的callee信息
 #[derive(Clone, Debug)]
 struct CallSite<'tcx> {
@@ -374,6 +392,7 @@ struct CallSite<'tcx> {
     arguments: Vec<mir::Operand<'tcx>>,
 }
 
+
 /// 函数调用类型：
 /// 1. 直接调用函数
 /// 2. 函数指针调用
@@ -383,11 +402,14 @@ enum LocalCallType {
     LocalFunctionPtr(mir::Local),
 }
 
+
+
 /// 给定一个mir::Body，解析某个函数内部的函数调用
 fn extract_function_call<'tcx>(
     tcx: TyCtxt<'tcx>,
     function: &mir::Body<'tcx>,
 ) -> Vec<CallSite<'tcx>> {
+
     use mir::visit::Visitor;
 
     #[derive(Clone)]
@@ -402,12 +424,13 @@ fn extract_function_call<'tcx>(
             SearchFunctionCall { tcx, caller, callsites: Vec::new() }
         }
         /// 用来解析caller里的调用点，一个包装函数
-        fn extract_call_site(&mut self) {
+        fn extract_call_site(&mut self){
             self.visit_body(self.caller);
         }
     }
 
     impl<'tcx, 'local> Visitor<'tcx> for SearchFunctionCall<'tcx, 'local> {
+
         /// 重载visit_terminator，解析terminator中的Call！
         fn visit_terminator(&mut self, terminator: &Terminator<'tcx>, _location: mir::Location) {
             if let TerminatorKind::Call { func, args, destination, .. } = &terminator.kind {
@@ -470,7 +493,7 @@ fn extract_arguments<'tcx>(function: &mir::Body<'tcx>) -> Vec<Argument<'tcx>> {
             let ty = function.local_decls[arg_local].ty;
 
             // local
-            Argument { arg_local, symbol, ty }
+            Argument {arg_local, symbol, ty }
         })
         .collect()
 }
@@ -494,7 +517,7 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
             | def::DefKind::Generator => (),
             _ => continue,
         }
-
+    
         // 获取mir::Body
         let mir = tcx.mir_built(ty::WithOptConstParam {
             did: function,
@@ -518,7 +541,7 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
         //  - caller的参数
         //  - 某个常量constants（这个常量可能是某个函数）
         //  - the return value of called functions
-        let get_origins = |from: mir::Local| /* -> impl Iterator<Item=Source> */ {
+        let get_origins = |from: mir::Local| /* -> impl Iterator<Item=Source> */ {        
             deps.dependencies(from)
                 .filter_map(|dep| {
                     use DependencyType::*;
@@ -569,9 +592,10 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
         for callsite in &callsites {
             let mut arg_sources = FxHashMap::default();
 
+
             for (index, arg) in callsite.arguments.iter().enumerate() {
                 let mut sources = Vec::new();
-
+                
                 use mir::Operand::*;
                 match arg {
                     Copy(place) | Move(place) => {
@@ -588,7 +612,7 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
                     }
                 }
 
-                arg_sources.insert(index + 1, sources);
+                arg_sources.insert(index+1, sources);
             }
 
             use LocalCallType::*;
@@ -596,6 +620,7 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
                 DirectCall(callee) => Callee::DirectCall(callee),
                 LocalFunctionPtr(ptr) => Callee::LocalFunctionPtr(get_origins(ptr).collect()),
             };
+
 
             //存入每个调用点的参数依赖关系！
             callee_dependencies.push(CalleeDependency { arg_sources, callee });
@@ -636,11 +661,12 @@ pub fn print_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>, all_dependencies: AllDepe
         for CalleeDependency { arg_sources, callee } in dependencies {
             match callee {
                 Callee::DirectCall(id) => {
+                
                     let callee_name = tcx.def_path_str(id);
                     println!("[{}] calls [{}]", caller_name, callee_name);
 
-                    for (arg_idx, sources) in arg_sources.iter() {
-                        if sources.len() != 0 {
+                    for (arg_idx, sources) in arg_sources.iter(){
+                        if sources.len() != 0{
                             println!("\targument[{}] (start from 1) depends on :", arg_idx);
                         }
                         for (_idx, source) in sources.iter().enumerate() {
@@ -672,6 +698,8 @@ pub fn print_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>, all_dependencies: AllDepe
     }
 }
 
+
+
 // fn get_generic_name(tcx: ty::TyCtxt<'_>, def_id: DefId) -> String {
 //     match tcx.opt_associated_item(def_id) {
 //         Some(ty::AssocItem{def_id, ..}) => {
@@ -687,6 +715,8 @@ fn _print_symbol(symbol: &Option<Symbol>) -> String {
         .map(|s| html_escape::encode_text(&s.to_ident_string()).to_string())
         .unwrap_or_else(|| String::from("_"))
 }
+
+
 
 /*
 /// Write into `output` a testual reprensentation of `all_dependencies` in dot format

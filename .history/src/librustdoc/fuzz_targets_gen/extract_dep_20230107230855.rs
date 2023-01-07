@@ -518,8 +518,7 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
         //  - caller的参数
         //  - 某个常量constants（这个常量可能是某个函数）
         //  - the return value of called functions
-        let get_origins = |from: mir::Local| /* -> impl Iterator<Item=Source> */ {
-            deps.dependencies(from)
+        let get_origins = |from: mir::Local| /* -> impl Iterator<Item=Source> */ {            deps.dependencies(from)
                 .filter_map(|dep| {
                     use DependencyType::*;
                     match dep {
