@@ -164,7 +164,6 @@ impl FuzzableType {
             FuzzableType::NoFuzzable => 0,
             FuzzableType::Primitive(primitive_type) => {
                 match primitive_type {
-                    //TODO:Bool变量的长度是多少
                     clean::PrimitiveType::I8
                     | clean::PrimitiveType::U8
                     | clean::PrimitiveType::Bool => 1,
