@@ -1,0 +1,230 @@
+use crate::fuzz_targets_gen::extract_dep::AllDependencies;
+use crate::fuzz_targets_gen::extract_dep::{
+    extract_arguments, Argument, CalleeDependency, Function,
+};
+use rustc_data_structures::fx::FxHashSet;
+use rustc_hir::def_id::DefId;
+use rustc_middle::mir;
+use rustc_middle::ty::{self, Ty, TyCtxt};
+
+/// 解析序列
+pub struct ExtractSequence {
+    all_sequence: Vec<Vec<String>>,
+}
+
+impl ExtractSequence {
+    // 初始化
+    pub fn new() -> Self {
+        ExtractSequence { all_sequence: Vec::new() }
+    }
+
+    /// 进行一个深度优先搜索，然后生成遍历序列
+    /// 获得函数签名之后，就获得了生成序列的源信息
+    pub fn extract_sequence<'tcx>(
+        &mut self,
+        tcx: TyCtxt<'tcx>,
+        test_crate_name: String,
+        all_dependencies: AllDependencies<'tcx>,
+        enable: bool,
+    ) {
+        // 装入所有解析的序列
+        let mut all_seq = Vec::new();
+        let mut visit_set = FxHashSet::default();
+
+        if !enable {
+            return;
+        }
+
+        //遍历每一个本地函数
+        for (caller_def_id, function) in all_dependencies.functions.iter() {
+            // 满足两个条件:
+            // 1. 需要当前crate的API
+            // 2. 测试每一个参数，如果有任何一个不是primitive类型的，都会成功
+            if function.arguments.iter().all(|arg| arg.ty.is_primitive_ty()) {
+                // 能进入这里，说明参数都是基本类型，说明是我们的起始节点
+
+                // 下面开始dfs
+                let mut func_seq = Vec::new();
+                let mut stack = Vec::new();
+
+                //dfs的start node，初始化stack
+                let function_info =
+                    FunctionInfo::new_by_caller_def_id(tcx, *caller_def_id, &all_dependencies);
+                stack.push(function_info);
+
+                // 开始进行dfs，是用栈来避免递归
+                while !stack.is_empty() {
+                    let function_info = stack.pop().unwrap();
+                    visit_set.insert(tcx.def_path_str(function_info.def_id));
+
+                    //下面对于每一个孩子进行遍历
+                    let callee_dependency =
+                        function_info.dependency_info.callee_dependencies.clone();
+                    for CalleeDependency { callee, callsite, .. } in callee_dependency {
+                        use super::extract_dep::Callee;
+                        let (crate_name, callsite_def_id) = match callee {
+                            Callee::DirectCall(def_id) => {
+                                (tcx.crate_name(def_id.krate).as_str().to_string(), def_id)
+                            }
+                            Callee::LocalFunctionPtr(_) => continue, //跳过
+                        };
+
+                        println!(
+                            "function_name {}, crate_name {}",
+                            tcx.crate_name(caller_def_id.krate),
+                            crate_name
+                        );
+                        if crate_name.starts_with(&test_crate_name) {
+                            // FIXME: 如果是test crate的api，推入序列
+                            func_seq.push(tcx.def_path_str(callsite_def_id));
+
+                            if callsite.return_ty.is_primitive_ty() {
+                                all_seq.push(func_seq.clone());
+                                func_seq.clear();
+                            }
+                            continue;
+                        }
+
+                        if let Some(info) = FunctionInfo::new_by_callee_def_id(
+                            tcx,
+                            callsite_def_id,
+                            &all_dependencies,
+                        ) {
+                            if !visit_set.contains(&tcx.def_path_str(callsite_def_id).to_string()) {
+                                // 否则存入stack供下次遍历
+                                stack.push(info);
+                            }
+                        }
+                    }
+                }
+
+                // dfs完毕，开始进行结束处理
+                if !func_seq.is_empty() {
+                    all_seq.push(func_seq);
+                }
+
+                // 结束
+            }
+        }
+
+        self.all_sequence = all_seq;
+    }
+
+    pub fn print_sequence(&self, enable: bool) {
+        if !enable {
+            return;
+        }
+        println!("\x1b[94mStart to print sequence");
+        for (idx, seq) in self.all_sequence.iter().enumerate() {
+            print!("Sequence {}: ", idx);
+            for func in seq {
+                print!("{} ", func);
+            }
+            println!("");
+        }
+        println!("Finish printing\x1b[0m");
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct FunctionInfo<'tcx> {
+    is_caller_def_id: bool,
+    def_id: DefId,
+    mir: mir::Body<'tcx>,
+    return_ty: Ty<'tcx>,
+    arguments: Vec<Argument<'tcx>>,
+    dependency_info: Function<'tcx>,
+}
+
+#[allow(dead_code)]
+impl FunctionInfo<'_> {
+    /// 对于当前crate的LocalDefId
+    pub fn new_by_caller_def_id<'a, 'tcx>(
+        tcx: TyCtxt<'tcx>,
+        def_id: DefId,
+        all_dependencies: &'a AllDependencies<'tcx>,
+    ) -> FunctionInfo<'tcx> {
+        let local_def_id = match def_id.as_local() {
+            Some(local_id) => local_id,
+            None => {
+                panic!("This is not a caller in this crate")
+            }
+        };
+
+        let mir = tcx.mir_built(ty::WithOptConstParam {
+            did: local_def_id,
+            const_param_did: tcx.opt_const_param_of(local_def_id),
+        });
+        let mir = mir.borrow();
+        let mir: &mir::Body<'_> = &mir;
+        let mir = mir.to_owned();
+
+        // 返回值
+        let return_ty = mir.local_decls[mir::Local::from_usize(0)].ty;
+        // 参数
+        let arguments = extract_arguments(&mir);
+
+        let dependency_info = *(all_dependencies
+            .functions
+            .iter()
+            .find(|(x, _)| tcx.def_path_str(**x) == tcx.def_path_str(def_id))
+            .unwrap()
+            .1)
+            .clone();
+
+        FunctionInfo { is_caller_def_id: true, def_id, mir, return_ty, arguments, dependency_info }
+    }
+
+    pub fn new_by_callee_def_id<'a, 'tcx>(
+        tcx: TyCtxt<'tcx>,
+        def_id: DefId,
+        all_dependencies: &'a AllDependencies<'tcx>,
+    ) -> Option<FunctionInfo<'tcx>> {
+        // 获得调用点def_id对应的function的local_def_id
+        let local_def_id = match tcx
+            .hir()
+            .body_owners()
+            .find(|x| tcx.def_path_str(x.to_def_id()) == tcx.def_path_str(def_id))
+        {
+            //当callee的路径和body_owner一样的时候，就可以找到函数体
+            Some(local) => local,
+            None => {
+                return None;
+            }
+        };
+
+        //获取mir::Body
+        let mir = tcx.mir_built(ty::WithOptConstParam {
+            did: local_def_id,
+            const_param_did: tcx.opt_const_param_of(local_def_id),
+        });
+        let mir = mir.borrow();
+        let mir: &mir::Body<'_> = &mir;
+        let mir = mir.to_owned();
+
+        // caller
+        let def_id = local_def_id.to_def_id();
+        // 返回值
+        let return_ty = mir.local_decls[mir::Local::from_usize(0)].ty;
+        // 参数
+        let arguments = extract_arguments(&mir);
+
+        let dependency_info = *(all_dependencies
+            .functions
+            .iter()
+            .find(|(x, _)| tcx.def_path_str(**x) == tcx.def_path_str(def_id))
+            .unwrap()
+            .1)
+            .clone();
+
+        Some(FunctionInfo {
+            is_caller_def_id: true,
+            def_id,
+            mir,
+            return_ty,
+            arguments,
+            dependency_info,
+        })
+    }
+}
