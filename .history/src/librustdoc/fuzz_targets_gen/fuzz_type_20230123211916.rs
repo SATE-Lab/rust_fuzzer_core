@@ -66,7 +66,7 @@ impl FuzzType {
             Tuple(inners) => {
                 let mut fixed_part = 0;
                 for inner in inners {
-                    let inner_length = inner.fixed_size_part_size();
+                    let inner_length = inner.fixed_part_size();
                     fixed_part = fixed_part + inner_length;
                 }
                 return fixed_part;

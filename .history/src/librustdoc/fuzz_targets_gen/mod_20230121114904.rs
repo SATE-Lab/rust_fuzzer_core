@@ -1,4 +1,3 @@
-mod afl_function_util;
 mod afl_param_util;
 mod context;
 mod extract_dep;
