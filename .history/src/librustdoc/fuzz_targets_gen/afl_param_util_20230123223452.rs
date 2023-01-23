@@ -5,7 +5,7 @@
 //!     2. 通过 AflForParam 生成参数
 //!         用法：let param_statement = generate_param_initial_statement(...)
 //!         生成内容：let _param3 = (_to_i32(data, 8), _to_slice(data, 111, 113))
-//!
+//!  
 use crate::fuzz_targets_gen::fuzz_type::FuzzType;
 use rustc_data_structures::fx::FxHashSet;
 
@@ -314,7 +314,7 @@ impl AflForParams for FuzzType {
     /// 生成参数初始化的赋值语句右边的expression，比如_to_i32(data, 11)
     /// data被分成两部分：
     /// |------fixed-part---------]-----dynamic-part--------|
-    ///             ｜                                 |
+    ///             ｜                                 |     
     ///       fixed_start_index                     dynamic_start_index
     /// fixed-part包括i32,u64等
     /// dynamic-part由于是动态可变，可以将data.len()-fixed_part.len()的剩余部分平分
