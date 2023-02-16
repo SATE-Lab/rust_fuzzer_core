@@ -454,7 +454,7 @@ pub(crate) fn _data_to_u8() -> &'static str {
 }
 
 pub(crate) fn _data_to_i8() -> &'static str {
-    "fn _to_i8(data:&[u8], index:usize)->i8 {
+    "fn _to_i8(data:&[u8], index:usize)->i8 {    
     data[index] as i8
 }\n"
 }
