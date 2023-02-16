@@ -61,7 +61,7 @@ pub(crate) fn to_strip_type_name(type_name: &String) -> String {
 
 //FIXME:目前只考虑引用、裸指针的情况，元组，切片，数组都暂时不考虑
 //暂时只考虑Result和Option
-//FIXME:Box,...
+//TODO:Box,...
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub(crate) enum PreludeType {
     NotPrelude(clean::Type),

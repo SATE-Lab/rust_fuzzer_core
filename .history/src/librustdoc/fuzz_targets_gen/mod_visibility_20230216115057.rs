@@ -1,7 +1,6 @@
 //! 这里定义了模块的可见性，用于通过可见性来过滤函数
 //! FIXME:  get_invisible_mod，后续可以优化
 
-use owo_colors::colors::xterm::ThistlePink;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::Visibility;
 #[derive(Debug, Clone)]
@@ -31,12 +30,6 @@ impl ModVisibity {
         if !self.inner.contains_key(&self.crate_name) {
             panic!("No crate mod");
         }
-        //论文框架
-        //title
-        //简介 别人做什么 没做 我为什么比他们好
-        //背景 技术特点
-        //技术流程 流程图 分模块
-        //如何实验
 
         // 存入已经处理过的mod
         let mut new_mod_visibility = FxHashMap::default();

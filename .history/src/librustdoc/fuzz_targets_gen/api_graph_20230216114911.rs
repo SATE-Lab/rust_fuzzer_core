@@ -142,7 +142,7 @@ impl<'a> ApiGraph<'a> {
     }
 
     /// 过滤api，根据可见性进行过滤，不是pub就过滤掉
-    /// FIXME:  是否必要
+    /// TODO: 是否必要
     pub(crate) fn filter_api_functions_by_mod_visibility(&mut self) {
         if self.mod_visibility.inner.is_empty() {
             panic!("No mod!!!!!!");
@@ -1152,7 +1152,7 @@ impl<'a> ApiGraph<'a> {
                         // 如果当前参数不是fuzzable的，那么就去api sequence寻找是否有这个依赖
                         // 也就是说，api sequence里是否有某个api的返回值是它的参数
 
-                        //FIXME: 处理move的情况
+                        //TODO:处理move的情况
                         let functions_in_sequence_len = sequence.functions.len();
                         let mut dependency_flag = false;
 
@@ -1266,7 +1266,7 @@ impl<'a> ApiGraph<'a> {
         let dependency_num = self.api_dependencies.len();
         for index in 0..dependency_num {
             let dependency = &self.api_dependencies[index];
-            //FIXME: 直接比较每一项内容是否可以节省点时间？
+            //TODO:直接比较每一项内容是否可以节省点时间？
             let tmp_dependency = ApiDependency {
                 output_fun: (*output_type, output_index),
                 input_fun: (*input_type, input_index),
