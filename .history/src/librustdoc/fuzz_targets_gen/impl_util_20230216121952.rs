@@ -129,7 +129,7 @@ pub(crate) fn extract_impls_from_cache(
     for impl_ in &crate_impl_collection.impl_trait_for_types {
         _analyse_impl(impl_, cache, tcx, &full_name_map, &mut api_graph);
     }
-    //FIXME: 如何提取trait对应的impl，impl traitA for traitB? impl dyn traitA?下面的逻辑有误
+    //FIXME：如何提取trait对应的impl，impl traitA for traitB? impl dyn traitA?下面的逻辑有误
 
     //for (did, impls) in trait_impl_maps {
     //   println!("trait:{:?}",did);
@@ -307,7 +307,7 @@ pub(crate) fn _analyse_impl(
 }
 
 //递归判断一个参数是否是self类型的
-//FIXME: 考虑在resolved path里面的括号里面可能存在self type
+//TODO：考虑在resolved path里面的括号里面可能存在self type
 fn is_param_self_type(ty_: &clean::Type) -> bool {
     if ty_.is_self_type() {
         return true;

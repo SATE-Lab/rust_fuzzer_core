@@ -307,7 +307,7 @@ pub(crate) fn _analyse_impl(
 }
 
 //递归判断一个参数是否是self类型的
-//FIXME: 考虑在resolved path里面的括号里面可能存在self type
+//TODO：考虑在resolved path里面的括号里面可能存在self type
 fn is_param_self_type(ty_: &clean::Type) -> bool {
     if ty_.is_self_type() {
         return true;
