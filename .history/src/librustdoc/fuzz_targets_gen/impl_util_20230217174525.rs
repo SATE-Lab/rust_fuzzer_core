@@ -269,14 +269,14 @@ pub(crate) fn _analyse_impl(
                 let api_unsafety =
                     ApiUnsafety::_get_unsafety_from_fnheader(&item.fn_header(tcx).unwrap());
 
-                let visibility = match item.visibility(tcx) {
-                    Some(visib) => visib.expect_local(),
-                    None => {
+                let visibility = match item.visibility(tcx){
+                    Some(visib)=>{visib.expect_local()}
+                    None=>{
                         //FIXME: inherit, 姑且当作public
-
-                        Visibility::Public
+          
+                        Visibility:: Public
                     }
-                };
+                }
 
                 //生成api function
                 //如果是实现了trait的话，需要把trait的全路径也包括进去
@@ -288,7 +288,7 @@ pub(crate) fn _analyse_impl(
                         output,
                         _trait_full_path: None,
                         _unsafe_tag: api_unsafety,
-                        visibility,
+                        visibility: item.visibility(tcx).unwrap().expect_local(),
                     },
                     Some(_) => {
                         println!("Method name: {}", method_name);
@@ -300,7 +300,7 @@ pub(crate) fn _analyse_impl(
                                 output,
                                 _trait_full_path: Some(real_trait_name.clone()),
                                 _unsafe_tag: api_unsafety,
-                                visibility,
+                                visibility: item.visibility(tcx).unwrap().expect_local(),
                             }
                         } else {
                             //println!("Trait not found in current crate.");

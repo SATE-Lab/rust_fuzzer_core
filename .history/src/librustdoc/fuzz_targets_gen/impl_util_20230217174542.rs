@@ -288,7 +288,7 @@ pub(crate) fn _analyse_impl(
                         output,
                         _trait_full_path: None,
                         _unsafe_tag: api_unsafety,
-                        visibility,
+                        visibility: item.visibility(tcx).unwrap().expect_local(),
                     },
                     Some(_) => {
                         println!("Method name: {}", method_name);
@@ -300,7 +300,7 @@ pub(crate) fn _analyse_impl(
                                 output,
                                 _trait_full_path: Some(real_trait_name.clone()),
                                 _unsafe_tag: api_unsafety,
-                                visibility,
+                                visibility: item.visibility(tcx).unwrap().expect_local(),
                             }
                         } else {
                             //println!("Trait not found in current crate.");

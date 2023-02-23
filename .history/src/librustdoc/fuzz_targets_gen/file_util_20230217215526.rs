@@ -7,30 +7,30 @@ use std::path::PathBuf;
 lazy_static! {
     static ref CRATE_TEST_DIR: FxHashMap<&'static str, &'static str> = {
         let mut m = FxHashMap::default();
-        m.insert("url", "./fuzz_dir/url_afl_work");
-        m.insert("regex_syntax", "/Users/yxz/workspace/fuzz/fuzz_dir/regex-syntax-afl-work");
-        m.insert("semver_parser", "/Users/yxz/workspace/fuzz/fuzz_dir/semver-parser-afl-work");
-        m.insert("bat", "/Users/yxz/workspace/fuzz/fuzz_dir/bat-afl-work");
-        m.insert("xi_core_lib", "/Users/yxz/workspace/fuzz/fuzz_dir/xi-core-lib-afl-work");
-        m.insert("proc_macro2", "/Users/yxz/workspace/fuzz/fuzz_dir/proc-macro2-afl-work");
-        m.insert("clap", "/Users/yxz/workspace/fuzz/fuzz_dir/clap-afl-work");
-        m.insert("regex", "/Users/yxz/workspace/fuzz/fuzz_dir/regex-afl-work");
-        m.insert("serde_json", "/Users/yxz/workspace/fuzz/fuzz_dir/serde-json-afl-work");
-        m.insert("tui", "/Users/yxz/workspace/fuzz/fuzz_dir/tui-afl-work");
-        m.insert("semver", "/Users/yxz/workspace/fuzz/fuzz_dir/semver-afl-work");
-        m.insert("http", "/Users/yxz/workspace/fuzz/fuzz_dir/http-afl-work");
-        m.insert("flate2", "/Users/yxz/workspace/fuzz/fuzz_dir/flate2-afl-work");
-        m.insert("time", "/Users/yxz/workspace/fuzz/fuzz_dir/time-afl-work");
+        m.insert("url", "/home/jjf/afl_fast_work/url_afl_work");
+        m.insert("regex_syntax", "/home/jjf/afl_fast_work/regex-syntax-afl-work");
+        m.insert("semver_parser", "/home/jjf/afl_fast_work/semver-parser-afl-work");
+        m.insert("bat", "/home/jjf/afl_fast_work/bat-afl-work");
+        m.insert("xi_core_lib", "/home/jjf/afl_fast_work/xi-core-lib-afl-work");
+        m.insert("proc_macro2", "/home/jjf/afl_fast_work/proc-macro2-afl-work");
+        m.insert("clap", "/home/jjf/afl_fast_work/clap-afl-work");
+        m.insert("regex", "/home/jjf/afl_fast_work/regex-afl-work");
+        m.insert("serde_json", "/home/jjf/afl_fast_work/serde-json-afl-work");
+        m.insert("tui", "/home/jjf/afl_fast_work/tui-afl-work");
+        m.insert("semver", "/home/jjf/afl_fast_work/semver-afl-work");
+        m.insert("http", "/home/jjf/afl_fast_work/http-afl-work");
+        m.insert("flate2", "/home/jjf/afl_fast_work/flate2-afl-work");
+        m.insert("time", "/home/jjf/afl_fast_work/time-afl-work");
 
         //fudge-like-directories
-        //m.insert("fudge_like_url", "/home/jjf/fudge_like_work/url-work");
-        //m.insert("fudge_like_regex", "/home/jjf/fudge_like_work/regex-work");
-        //m.insert("fudge_like_time", "/home/jjf/fudge_like_work/time-work");
+        m.insert("fudge_like_url", "/home/jjf/fudge_like_work/url-work");
+        m.insert("fudge_like_regex", "/home/jjf/fudge_like_work/regex-work");
+        m.insert("fudge_like_time", "/home/jjf/fudge_like_work/time-work");
 
         //fudge-directories
-        //m.insert("fudge_regex", "/home/jjf/fudge_work/regex-work");
-        //m.insert("fudge_url", "/home/jjf/fudge_work/url-work");
-        //m.insert("fudge_time", "/home/jjf/fudge_work/time-work");
+        m.insert("fudge_regex", "/home/jjf/fudge_work/regex-work");
+        m.insert("fudge_url", "/home/jjf/fudge_work/url-work");
+        m.insert("fudge_time", "/home/jjf/fudge_work/time-work");
         m
     };
 }
@@ -38,9 +38,9 @@ lazy_static! {
 lazy_static! {
     static ref RANDOM_TEST_DIR: FxHashMap<&'static str, &'static str> = {
         let mut m = FxHashMap::default();
-        m.insert("regex", "/Users/yxz/workspace/fuzz/random_work/regex-work");
-        m.insert("url", "/Users/yxz/workspace/fuzz/random_work/url-work");
-        m.insert("time", "/Users/yxz/workspace/fuzz/random_work/time-work");
+        m.insert("regex", "/home/jjf/random_work/regex-work");
+        m.insert("url", "/home/jjf/random_work/url-work");
+        m.insert("time", "/home/jjf/random_work/time-work");
         m
     };
 }
@@ -48,13 +48,10 @@ lazy_static! {
 lazy_static! {
     static ref LIBFUZZER_FUZZ_TARGET_DIR: FxHashMap<&'static str, &'static str> = {
         let mut m = FxHashMap::default();
-        m.insert("url", "/Users/yxz/workspace/fuzz/libfuzzer_work/url-libfuzzer-targets");
-        m.insert(
-            "regex_syntax",
-            "/Users/yxz/workspace/fuzz/libfuzzer_work/regex-syntax-libfuzzer-targets",
-        );
-        m.insert("syn", "/Users/yxz/workspace/fuzz//libfuzzer_work/syn-libfuzzer-targets");
-        m.insert("semver_parser", "/Users/yxz/workspace/fuzz/libfuzzer_work/sem-libfuzzer-targets");
+        m.insert("url", "/home/jjf/libfuzzer_work/url-libfuzzer-targets");
+        m.insert("regex_syntax", "/home/jjf/libfuzzer_work/regex-syntax-libfuzzer-targets");
+        m.insert("syn", "/home/jjf/libfuzzer_work/syn-libfuzzer-targets");
+        m.insert("semver_parser", "/home/jjf/libfuzzer_work/sem-libfuzzer-targets");
         m
     };
 }
@@ -69,9 +66,9 @@ lazy_static! {
     };
 }
 
-static _AFL_DIR: &'static str = "afl_files";
+static _TEST_FILE_DIR: &'static str = "test_files";
 static _REPRODUCE_FILE_DIR: &'static str = "replay_files";
-static _LIBFUZZER_DIR: &'static str = "libfuzzer_files";
+static _LIBFUZZER_DIR_NAME: &'static str = "libfuzzer_files";
 static MAX_TEST_FILE_NUMBER: usize = 300;
 static DEFAULT_RANDOM_FILE_NUMBER: usize = 100;
 
@@ -115,7 +112,6 @@ impl FileHelper {
         } else {
             RANDOM_TEST_DIR.get(crate_name.as_str()).unwrap().to_string()
         };
-        println!("test_dir is [{}]", test_dir);
         let mut sequence_count = 0;
         let mut test_files = Vec::new();
         let mut reproduce_files = Vec::new();
@@ -153,7 +149,7 @@ impl FileHelper {
         if test_path.is_file() {
             fs::remove_file(&test_path).unwrap();
         }
-        let test_file_path = test_path.clone().join(_AFL_DIR);
+        let test_file_path = test_path.clone().join(_TEST_FILE_DIR);
         ensure_empty_dir(&test_file_path);
         let reproduce_file_path = test_path.clone().join(_REPRODUCE_FILE_DIR);
         ensure_empty_dir(&reproduce_file_path);
@@ -169,7 +165,7 @@ impl FileHelper {
         if libfuzzer_path.is_file() {
             fs::remove_file(&libfuzzer_path).unwrap();
         }
-        let libfuzzer_files_path = libfuzzer_path.join(_LIBFUZZER_DIR);
+        let libfuzzer_files_path = libfuzzer_path.join(_LIBFUZZER_DIR_NAME);
         ensure_empty_dir(&libfuzzer_files_path);
         write_to_files(
             &self.crate_name,

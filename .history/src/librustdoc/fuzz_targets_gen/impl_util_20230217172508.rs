@@ -5,7 +5,8 @@ use crate::fuzz_targets_gen::api_function::ApiFunction;
 use crate::fuzz_targets_gen::api_util;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::def_id::DefId;
-use rustc_middle::ty::{TyCtxt, Visibility};
+use rustc_middle::ty::TyCtxt;
+use rustc_middle::ty::query::query_keys::visibility;
 use rustc_span::Symbol;
 use thin_vec::ThinVec;
 //FIXME: 是否需要为impl里面的method重新设计数据结构？目前沿用了ApiFunction,或者直接对ApiFunction进行扩展
@@ -269,14 +270,10 @@ pub(crate) fn _analyse_impl(
                 let api_unsafety =
                     ApiUnsafety::_get_unsafety_from_fnheader(&item.fn_header(tcx).unwrap());
 
-                let visibility = match item.visibility(tcx) {
-                    Some(visib) => visib.expect_local(),
-                    None => {
-                        //FIXME: inherit, 姑且当作public
-
-                        Visibility::Public
-                    }
-                };
+                let visibility = match item.visibility(tcx){
+                    Some(visib)=>{}
+                    None,
+                }
 
                 //生成api function
                 //如果是实现了trait的话，需要把trait的全路径也包括进去
@@ -288,7 +285,7 @@ pub(crate) fn _analyse_impl(
                         output,
                         _trait_full_path: None,
                         _unsafe_tag: api_unsafety,
-                        visibility,
+                        visibility: item.visibility(tcx).unwrap().expect_local(),
                     },
                     Some(_) => {
                         println!("Method name: {}", method_name);
@@ -300,7 +297,7 @@ pub(crate) fn _analyse_impl(
                                 output,
                                 _trait_full_path: Some(real_trait_name.clone()),
                                 _unsafe_tag: api_unsafety,
-                                visibility,
+                                visibility: item.visibility(tcx).unwrap().expect_local(),
                             }
                         } else {
                             //println!("Trait not found in current crate.");

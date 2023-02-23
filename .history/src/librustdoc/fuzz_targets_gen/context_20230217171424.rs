@@ -142,7 +142,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                     file_helper.write_libfuzzer_files();
                 }
             }
-            println!("Finish to parse tested crate and generate test file.");
+            println!("Finish to parse tested crate and generate test file.", krate.name(tcx));
         }
         Ok((cx, krate))
     }

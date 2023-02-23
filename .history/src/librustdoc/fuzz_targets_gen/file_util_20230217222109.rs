@@ -7,7 +7,7 @@ use std::path::PathBuf;
 lazy_static! {
     static ref CRATE_TEST_DIR: FxHashMap<&'static str, &'static str> = {
         let mut m = FxHashMap::default();
-        m.insert("url", "./fuzz_dir/url_afl_work");
+        m.insert("url", "/Users/yxz/workspace/fuzz/fuzz_dir/url_afl_work");
         m.insert("regex_syntax", "/Users/yxz/workspace/fuzz/fuzz_dir/regex-syntax-afl-work");
         m.insert("semver_parser", "/Users/yxz/workspace/fuzz/fuzz_dir/semver-parser-afl-work");
         m.insert("bat", "/Users/yxz/workspace/fuzz/fuzz_dir/bat-afl-work");
@@ -115,7 +115,6 @@ impl FileHelper {
         } else {
             RANDOM_TEST_DIR.get(crate_name.as_str()).unwrap().to_string()
         };
-        println!("test_dir is [{}]", test_dir);
         let mut sequence_count = 0;
         let mut test_files = Vec::new();
         let mut reproduce_files = Vec::new();
@@ -153,7 +152,7 @@ impl FileHelper {
         if test_path.is_file() {
             fs::remove_file(&test_path).unwrap();
         }
-        let test_file_path = test_path.clone().join(_AFL_DIR);
+        let test_file_path = test_path.clone().join(_AFL_FILE_DIR);
         ensure_empty_dir(&test_file_path);
         let reproduce_file_path = test_path.clone().join(_REPRODUCE_FILE_DIR);
         ensure_empty_dir(&reproduce_file_path);

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 lazy_static! {
     static ref CRATE_TEST_DIR: FxHashMap<&'static str, &'static str> = {
         let mut m = FxHashMap::default();
-        m.insert("url", "./fuzz_dir/url_afl_work");
+        m.insert("url", "/Users/yxz/workspace/fuzz/fuzz_dir/url_afl_work");
         m.insert("regex_syntax", "/Users/yxz/workspace/fuzz/fuzz_dir/regex-syntax-afl-work");
         m.insert("semver_parser", "/Users/yxz/workspace/fuzz/fuzz_dir/semver-parser-afl-work");
         m.insert("bat", "/Users/yxz/workspace/fuzz/fuzz_dir/bat-afl-work");

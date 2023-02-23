@@ -142,7 +142,10 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                     file_helper.write_libfuzzer_files();
                 }
             }
-            println!("Finish to parse tested crate and generate test file.");
+            println!(
+                "Finish parsing dependencies. The name of the parsed crate is {}.",
+                krate.name(tcx)
+            );
         }
         Ok((cx, krate))
     }
@@ -153,8 +156,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
 
     fn item(&mut self, item: clean::Item) -> Result<(), Error> {
         //FIXME: 如果是函数
-        let _name = item.name;
-        /*match *item.kind {
+        match *item.kind {
             clean_types::ItemKind::FunctionItem(_) => {
                 let full_name = self.full_path(&item);
                 println!("Paring function item [{}]", full_name);
@@ -168,7 +170,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             _ => {
                 println!("Not a function item");
             }
-        }*/
+        }
 
         Ok(())
     }
