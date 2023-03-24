@@ -8,7 +8,7 @@ lazy_static! {
     static ref CRATE_TEST_DIR: FxHashMap<&'static str, &'static str> = {
         let mut m = FxHashMap::default();
         m.insert("url", "./fuzz_dir/url_afl_work");
-        m.insert("regex_syntax", "/Users/yxz/workspace/fuzz/fuzz_dir/regex-syntax-afl-work");
+        /*m.insert("regex_syntax", "/Users/yxz/workspace/fuzz/fuzz_dir/regex-syntax-afl-work");
         m.insert("semver_parser", "/Users/yxz/workspace/fuzz/fuzz_dir/semver-parser-afl-work");
         m.insert("bat", "/Users/yxz/workspace/fuzz/fuzz_dir/bat-afl-work");
         m.insert("xi_core_lib", "/Users/yxz/workspace/fuzz/fuzz_dir/xi-core-lib-afl-work");
@@ -31,6 +31,7 @@ lazy_static! {
         //m.insert("fudge_regex", "/home/jjf/fudge_work/regex-work");
         //m.insert("fudge_url", "/home/jjf/fudge_work/url-work");
         //m.insert("fudge_time", "/home/jjf/fudge_work/time-work");
+        */
         m
     };
 }
@@ -184,7 +185,7 @@ impl FileHelper {
 fn write_to_files(crate_name: &String, path: &PathBuf, contents: &Vec<String>, prefix: &str) {
     let file_number = contents.len();
     for i in 0..file_number {
-        let filename = format!("{}_{}{}.rs", prefix, crate_name, i);
+        let filename = format!("{}_{}{:0>5}.rs", prefix, crate_name, i);
         let full_filename = path.join(filename);
         let mut file = fs::File::create(full_filename).unwrap();
         file.write_all(contents[i].as_bytes()).unwrap();
