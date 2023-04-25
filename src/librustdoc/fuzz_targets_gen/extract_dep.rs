@@ -4,9 +4,9 @@ use rustc_hir::def;
 use rustc_hir::def_id::DefId;
 use rustc_index::vec::IndexVec;
 use rustc_middle::mir;
-use rustc_middle::mir::Local;
 use rustc_middle::mir::terminator::*;
 use rustc_middle::mir::Constant;
+use rustc_middle::mir::Local;
 use rustc_middle::mir::TerminatorKind;
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_span::symbol::Symbol;
@@ -40,11 +40,9 @@ pub struct AllDependencies<'tcx> {
     pub functions: FxHashMap<DefId, Box<Function<'tcx>>>,
 }
 
-
 /*
 * 函数结构
 */
-
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -57,7 +55,7 @@ pub struct Function<'tcx> {
     return_deps: Vec<Source<'tcx>>,
     /// 函数内部调用函数，被调用者的依赖
     pub callee_dependencies: Vec<CalleeDependency<'tcx>>,
-    pub mir: mir::Body<'tcx>
+    pub mir: mir::Body<'tcx>,
 }
 
 ///表示函数的形式参数
@@ -142,7 +140,7 @@ impl<'tcx> LocalDependencies<'tcx> {
         //  - the local variables
         //  - temporaries
         //  - constants
-        // The index of a dependency to a constant is its index in `constants` 
+        // The index of a dependency to a constant is its index in `constants`
         // shifted by `locals_count`.
 
         //解析mir中的赋值,tong
@@ -167,7 +165,6 @@ impl<'tcx> LocalDependencies<'tcx> {
                 rvalue: &mir::Rvalue<'tcx>,
                 _: mir::Location,
             ) {
-                
                 let locals_count = self.locals_count;
                 let constants = self.constants;
                 let dependencies: &mut IndexVec<mir::Local, BitVec> = self.dependencies;
@@ -195,19 +192,24 @@ impl<'tcx> LocalDependencies<'tcx> {
                 // 对每个rvalue进行匹配
                 use mir::Rvalue::*;
                 match rvalue {
-                    Use(op) | Repeat(op, _) | Cast(_, op, _) | UnaryOp(_, op) | ShallowInitBox(op,_ )=> {
-
+                    Use(op)
+                    | Repeat(op, _)
+                    | Cast(_, op, _)
+                    | UnaryOp(_, op)
+                    | ShallowInitBox(op, _) => {
                         //依赖于某个表达式
                         dependencies[lvalue].set(get_id(op), true);
                     }
-                    Ref(_, _, place) | AddressOf(_, place) | Len(place) | Discriminant(place) | CopyForDeref(place) => {
-                        
+                    Ref(_, _, place)
+                    | AddressOf(_, place)
+                    | Len(place)
+                    | Discriminant(place)
+                    | CopyForDeref(place) => {
                         //对某个变量取值或者什么的，所以是一个place， place直接就有local
                         dependencies[lvalue].set(place.local.as_usize(), true);
                     }
 
                     BinaryOp(_, ops) | CheckedBinaryOp(_, ops) => {
-
                         //操作
                         let op1 = &ops.0;
                         let op2 = &ops.1;
@@ -215,23 +217,19 @@ impl<'tcx> LocalDependencies<'tcx> {
                         dependencies[lvalue].set(get_id(op2), true);
                     }
                     Aggregate(_, ops) => {
-
                         //聚合操作，类似于结构体的成员
                         for op in ops {
                             dependencies[lvalue].set(get_id(op), true);
                         }
                     }
                     ThreadLocalRef(_) => {
-
                         //ThreadLocalRef是全局静态变量，不用管
-                        () 
-                    }
-                    NullaryOp(_, _) => {
-                        
-                        //sizeof() alignof() 没有依赖                        
                         ()
                     }
-                    
+                    NullaryOp(_, _) => {
+                        //sizeof() alignof() 没有依赖
+                        ()
+                    }
                 }
             }
         }
@@ -388,15 +386,13 @@ fn extract_constant<'tcx>(function: &mir::Body<'tcx>) -> Vec<mir::Constant<'tcx>
     search_constants.constants
 }
 
-
 //******************** */
-
 /// 函数调用点，通过extract_function_call进行解析获得caller的callee信息
 #[derive(Clone, Debug)]
 pub struct CallSite<'tcx> {
     /// 有两种调用类型，一种是直接调用，一种是函数指针
     function: LocalCallType,
-    
+
     /// 被调用函数的返回值会传递给的局部变量，如果有就是 Some(...)，否则 None
     return_variable: Option<mir::Local>,
     pub return_ty: Ty<'tcx>,
@@ -458,7 +454,7 @@ fn extract_function_call<'tcx>(
                         //match place.ty(self.caller.local_decls(), self.tcx).ty {
                         //}
                         LocalCallType::LocalFunctionPtr(place.local)
-                    },
+                    }
                     //直接调用的函数是一种常量
                     Constant(constant) => {
                         if let ty::FnDef(def_id, _) = constant.literal.ty().kind() {
@@ -507,9 +503,8 @@ fn extract_function_call<'tcx>(
 /// Extract the information about the arguments of `function`
 /// 包括local的标号，名字，类型
 pub fn extract_arguments<'tcx>(function: &mir::Body<'tcx>) -> Vec<Argument<'tcx>> {
-    
     /// 辅助函数，通过mir::Body局部变量标号来确定名字
-    fn get_name_by_local<'tcx>(function: &mir::Body<'tcx>, arg_local: Local) -> Option<Symbol>{
+    fn get_name_by_local<'tcx>(function: &mir::Body<'tcx>, arg_local: Local) -> Option<Symbol> {
         let symbol = function
             .var_debug_info
             .iter()
@@ -524,7 +519,6 @@ pub fn extract_arguments<'tcx>(function: &mir::Body<'tcx>) -> Vec<Argument<'tcx>
             .map(|debug| debug.name);
         symbol
     }
-
 
     function
         .args_iter()
@@ -719,9 +713,7 @@ pub fn print_all_dependencies<'tcx>(
                     let callee_name = tcx.def_path_str(id);
                     println!("[{}] calls [{}]", caller_name, callee_name);
 
-
                     println!("待做");
-
 
                     //use super::extract_seq::FunctionInfo;
                     //let info = FunctionInfo::new(tcx, id.as_local().unwrap());
