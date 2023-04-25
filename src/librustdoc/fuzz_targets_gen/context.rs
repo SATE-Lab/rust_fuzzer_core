@@ -8,7 +8,7 @@ use std::rc::Rc;
 //use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 //use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
-use rustc_span::Symbol;
+use rustc_span::{Symbol};
 
 use super::{api_function, api_util, impl_util};
 use crate::clean::{self, types as clean_types};
@@ -17,10 +17,11 @@ use crate::error::Error;
 use crate::formats::cache::Cache;
 use crate::formats::item_type::ItemType;
 use crate::formats::FormatRenderer;
-use crate::fuzz_targets_gen::api_graph::ApiGraph;
+use crate::fuzz_targets_gen::api_graph::{ApiGraph};
 use crate::fuzz_targets_gen::extract_dep::{extract_all_dependencies, print_all_dependencies};
 use crate::fuzz_targets_gen::extract_seq::ExtractSequence;
 use crate::fuzz_targets_gen::file_util;
+
 
 #[derive(Clone)]
 pub(crate) struct Context<'tcx> {
@@ -35,6 +36,8 @@ pub(crate) struct Context<'tcx> {
     pub(crate) _tcx: TyCtxt<'tcx>,
     pub(crate) _cache: Rc<Cache>,
 }
+
+
 
 impl Context<'_> {
     /// 获得全部的路径名称，比如 crate::abc::cde::FunctionName
@@ -77,8 +80,9 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
         let target_dir_name = strs[strs.len() - 2];
 
         println!("Output dir name is {}", target_dir_name);
+        
         if target_dir_name == "target" {
-            //解析
+            // 解析corpus program
             println!(
                 "\nStart to parse dependencies.\nThe name of the parsed crate is {}.",
                 krate.name(tcx)
@@ -89,19 +93,32 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
 
                 let enable = true;
                 let mut extract_sequemce = ExtractSequence::new();
-                extract_sequemce.extract_sequence(tcx, "url".to_string(), all_dependencies, enable);
-                extract_sequemce.print_sequence(enable);
+                extract_sequemce.extract_sequence(
+                    tcx, 
+                    krate.name(tcx).to_string(), 
+                    "url".to_string(), 
+                    all_dependencies, 
+                    enable
+                );
+                
+       
+                extract_sequemce.print_sequence(enable, "/home/yxz/workspace/fuzz/experiment/url-seq", "url");
             });
 
+    
             println!(
                 "Finish parsing dependencies. The name of the parsed crate is {}.",
                 krate.name(tcx)
             );
         } else {
+            // 解析tested lib
             println!(
                 "\nStart to parse tested crate and generate test file.\nThe name of the tested crate is {}.",
                 krate.name(tcx)
             );
+            if krate.name(tcx).to_string() !="url"{
+                return Ok((cx, krate))
+            }
 
             let mut api_graph = ApiGraph::new(&krate.name(tcx).to_string(), cx.cache());
             let mut full_name_map = impl_util::FullNameMap::new();
@@ -122,26 +139,36 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
 
             api_graph.find_all_dependencies();
 
-            let random_strategy = false;
-            if !random_strategy {
+
+
+            use crate::fuzz_targets_gen::api_graph::GraphTraverseAlgorithm::*;
+
+            let generation_strategy = _UseRealWorld;
+            /*if random_strategy == _Default {
+                api_graph.generate_all_possoble_sequences(_BfsEndPoint);
+            }else{
                 api_graph.default_generate_sequences();
-            } else {
-                use crate::fuzz_targets_gen::api_graph::GraphTraverseAlgorithm::_RandomWalk;
-                api_graph.generate_all_possoble_sequences(_RandomWalk);
-            }
+            }*/
+            api_graph.generate_all_possoble_sequences(generation_strategy);
+
 
             //print_message::_print_generic_functions(&api_dependency_graph);
             //println!("total functions in crate : {:?}", api_graph.api_functions.len());
-            if file_util::can_write_to_file(&api_graph._crate_name, random_strategy) {
+            
+
+            
+            if file_util::can_write_to_file(&api_graph._crate_name, generation_strategy) {
                 //whether to use random strategy
-                let file_helper = file_util::FileHelper::new(&api_graph, random_strategy);
+                let file_helper = file_util::FileHelper::new(&api_graph, generation_strategy);
                 //println!("file_helper:{:?}", file_helper);
                 file_helper.write_files();
 
-                if file_util::can_generate_libfuzzer_target(&api_graph._crate_name) {
+
+                if false && file_util::can_generate_libfuzzer_target(&api_graph._crate_name) {
                     file_helper.write_libfuzzer_files();
                 }
             }
+            
             println!("Finish to parse tested crate and generate test file.");
         }
         Ok((cx, krate))

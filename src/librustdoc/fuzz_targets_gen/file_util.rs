@@ -1,13 +1,21 @@
 use crate::fuzz_targets_gen::api_graph::ApiGraph;
+use crate::fuzz_targets_gen::api_graph::GraphTraverseAlgorithm::*;
+use itertools::Itertools;
 use rustc_data_structures::fx::FxHashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
+use super::api_graph::GraphTraverseAlgorithm;
+
+fn generate_fuzz_file_path(dir_name: &str) -> String {
+    format!("/home/yxz/workspace/fuzz/fuzz_file_dir/{}", dir_name)
+}
+
 lazy_static! {
-    static ref CRATE_TEST_DIR: FxHashMap<&'static str, &'static str> = {
+    static ref DEFAULT_CRATE_TEST_DIR: FxHashMap<&'static str, String> = {
         let mut m = FxHashMap::default();
-        m.insert("url", "./fuzz_dir/url_afl_work");
+        m.insert("url", generate_fuzz_file_path("default_url_afl_work"));
         /*m.insert("regex_syntax", "/Users/yxz/workspace/fuzz/fuzz_dir/regex-syntax-afl-work");
         m.insert("semver_parser", "/Users/yxz/workspace/fuzz/fuzz_dir/semver-parser-afl-work");
         m.insert("bat", "/Users/yxz/workspace/fuzz/fuzz_dir/bat-afl-work");
@@ -37,11 +45,19 @@ lazy_static! {
 }
 
 lazy_static! {
-    static ref RANDOM_TEST_DIR: FxHashMap<&'static str, &'static str> = {
+    static ref REAL_WORLD_CRATE_TEST_DIR: FxHashMap<&'static str, String> = {
         let mut m = FxHashMap::default();
-        m.insert("regex", "/Users/yxz/workspace/fuzz/random_work/regex-work");
-        m.insert("url", "/Users/yxz/workspace/fuzz/random_work/url-work");
-        m.insert("time", "/Users/yxz/workspace/fuzz/random_work/time-work");
+        m.insert("url", generate_fuzz_file_path("real_world_url_afl_work"));
+        m
+    };
+}
+
+lazy_static! {
+    static ref RANDOM_TEST_DIR: FxHashMap<&'static str, String> = {
+        let mut m = FxHashMap::default();
+        m.insert("url", generate_fuzz_file_path("url_random_work"));
+        //m.insert("regex", "/Users/yxz/workspace/fuzz/random_work/regex-work");
+        //m.insert("time", "/Users/yxz/workspace/fuzz/random_work/time-work");
         m
     };
 }
@@ -76,16 +92,29 @@ static _LIBFUZZER_DIR: &'static str = "libfuzzer_files";
 static MAX_TEST_FILE_NUMBER: usize = 300;
 static DEFAULT_RANDOM_FILE_NUMBER: usize = 100;
 
-pub(crate) fn can_write_to_file(crate_name: &String, random_strategy: bool) -> bool {
-    if !random_strategy && CRATE_TEST_DIR.contains_key(crate_name.as_str()) {
-        return true;
+pub(crate) fn can_write_to_file(crate_name: &String, strategy: GraphTraverseAlgorithm) -> bool {
+    match strategy {
+        _Default => DEFAULT_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
+        _UseRealWorld => REAL_WORLD_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
+        _ => false, /*
+                    _Bfs => todo!(),
+                    _FastBfs => todo!(),
+                    _BfsEndPoint => todo!(),
+                    _FastBfsEndPoint => todo!(),
+                    _RandomWalk => todo!(),
+                    _RandomWalkEndPoint => todo!(),
+                    _TryDeepBfs => todo!(),
+                    _DirectBackwardSearch => todo!(),
+                    _UseRealWorld => todo!(),*/
     }
 
+    /*if !random_strategy && CRATE_TEST_DIR.contains_key(crate_name.as_str()) {
+        return true;
+    }
     if random_strategy && RANDOM_TEST_DIR.contains_key(crate_name.as_str()) {
         return true;
-    }
-
-    return false;
+    }*/
+    //return false;
 }
 
 pub(crate) fn can_generate_libfuzzer_target(crate_name: &String) -> bool {
@@ -107,22 +136,24 @@ pub(crate) struct FileHelper {
 
 impl FileHelper {
     /// 进行初始化工作
-    pub(crate) fn new(api_graph: &ApiGraph<'_>, random_strategy: bool) -> Self {
+    pub(crate) fn new(api_graph: &ApiGraph<'_>, strategy: GraphTraverseAlgorithm) -> Self {
         let crate_name = api_graph._crate_name.clone();
 
         //按照不同策略生成在不同的文件夹里
-        let test_dir = if !random_strategy {
-            CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().to_string()
-        } else {
-            RANDOM_TEST_DIR.get(crate_name.as_str()).unwrap().to_string()
-        };
+        let test_dir = match strategy {
+            _Default => DEFAULT_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str(),
+            _UseRealWorld => REAL_WORLD_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str(),
+            _ => "",
+        }
+        .to_string();
+
         println!("test_dir is [{}]", test_dir);
         let mut sequence_count = 0;
         let mut test_files = Vec::new();
         let mut reproduce_files = Vec::new();
         let mut libfuzzer_files = Vec::new();
         //let chosen_sequences = api_graph._naive_choose_sequence(MAX_TEST_FILE_NUMBER);
-        let chosen_sequences = if !random_strategy {
+        let _chosen_sequences = if strategy != _RandomWalk {
             api_graph._heuristic_choose(MAX_TEST_FILE_NUMBER, true)
         } else {
             let random_size = if RANDOM_TEST_FILE_NUMBERS.contains_key(crate_name.as_str()) {
@@ -133,6 +164,21 @@ impl FileHelper {
             api_graph._first_choose(random_size)
         };
         //println!("chosen sequences number: {}", chosen_sequences.len());
+
+        let chosen_sequences = api_graph.api_sequences.clone();
+        let mut sequence_map = FxHashMap::default();
+        for seq in chosen_sequences {
+            let seq_str = seq.print_function(api_graph, false);
+            sequence_map.insert(seq_str, seq);
+        }
+        for (seq_str, _seq) in &sequence_map {
+            println!("This is in refined sequences: {}", seq_str);
+        }
+
+        println!("refined sequences contains {} sequences", sequence_map.len());
+        let mut chosen_sequences = sequence_map.iter().collect_vec();
+        chosen_sequences.sort_by(|(x, _), (y, _)| x.cmp(y));
+        let chosen_sequences = chosen_sequences.iter().map(|(_s, seq)| seq.clone()).collect_vec();
 
         for sequence in &chosen_sequences {
             if sequence_count >= MAX_TEST_FILE_NUMBER {
@@ -200,5 +246,6 @@ fn ensure_empty_dir(path: &PathBuf) {
     if path.is_dir() {
         fs::remove_dir_all(path).unwrap();
     }
+    println!("{}", path.display());
     fs::create_dir_all(path).unwrap();
 }

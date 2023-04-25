@@ -3,18 +3,19 @@ use crate::fuzz_targets_gen::api_function::ApiFunction;
 use crate::fuzz_targets_gen::api_sequence::{ApiCall, ApiSequence, ParamType};
 use crate::fuzz_targets_gen::api_util;
 use crate::fuzz_targets_gen::call_type::CallType;
-//use crate::fuzz_targets_gen::fuzz_type;
 use crate::fuzz_targets_gen::fuzz_type::FuzzableType;
 use crate::fuzz_targets_gen::impl_util::FullNameMap;
 use crate::fuzz_targets_gen::mod_visibility::ModVisibity;
 use crate::fuzz_targets_gen::prelude_type;
+use itertools::Itertools;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
-//use crate::clean::{PrimitiveType};
+use std::time::Duration;
 
 use rand::thread_rng;
 use rand::Rng;
 use rustc_middle::ty::Visibility;
 
+use super::api_sequence::ReverseApiSequence;
 use super::fuzz_type;
 use super::generic_function::GenericFunction;
 
@@ -40,13 +41,28 @@ lazy_static! {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ApiGraph<'a> {
+    /// 当前crate的名字
     pub(crate) _crate_name: String,
+
+    /// 当前待测crate里面公开的API
     pub(crate) api_functions: Vec<ApiFunction>,
+
+    /// 在bfs的时候，访问过的API不再访问
     pub(crate) api_functions_visited: Vec<bool>,
+
+    /// 根据函数签名解析出的API依赖关系
     pub(crate) api_dependencies: Vec<ApiDependency>,
+
+    /// 生成的一切可能的API序列
     pub(crate) api_sequences: Vec<ApiSequence>,
-    pub(crate) full_name_map: FullNameMap,  //did to full_name
-    pub(crate) mod_visibility: ModVisibity, //the visibility of mods，to fix the problem of `pub(crate) use`
+
+    /// DefId到名字的映射
+    pub(crate) full_name_map: FullNameMap,
+
+    /// the visibility of mods，to fix the problem of `pub(crate) use`
+    pub(crate) mod_visibility: ModVisibity,
+
+    ///暂时不支持的
     pub(crate) generic_functions: Vec<GenericFunction>,
     pub(crate) functions_with_unsupported_fuzzable_types: FxHashSet<String>,
     pub(crate) cache: &'a Cache,
@@ -54,6 +70,8 @@ pub(crate) struct ApiGraph<'a> {
 }
 
 use core::fmt::Debug;
+use std::thread::sleep;
+
 impl Debug for Cache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Cache").finish()
@@ -62,6 +80,7 @@ impl Debug for Cache {
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) enum GraphTraverseAlgorithm {
+    _Default,
     _Bfs,
     _FastBfs,
     _BfsEndPoint,
@@ -70,6 +89,7 @@ pub(crate) enum GraphTraverseAlgorithm {
     _RandomWalkEndPoint,
     _TryDeepBfs,
     _DirectBackwardSearch,
+    _UseRealWorld, //当前的方法，使用解析出来的sequence
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Copy)]
@@ -83,8 +103,8 @@ pub(crate) enum ApiType {
 pub(crate) struct ApiDependency {
     pub(crate) output_fun: (ApiType, usize), //the index of first func
     pub(crate) input_fun: (ApiType, usize),  //the index of second func
-    pub(crate) input_param_index: usize,
-    pub(crate) call_type: CallType,
+    pub(crate) input_param_index: usize,     //参数的索引
+    pub(crate) call_type: CallType,          //调用类型
 }
 
 impl<'a> ApiGraph<'a> {
@@ -126,6 +146,7 @@ impl<'a> ApiGraph<'a> {
     pub(crate) fn filter_functions(&mut self) {
         self.filter_functions_defined_on_prelude_type();
         self.filter_api_functions_by_mod_visibility();
+        println!("filtered api functions contain {} apis", self.api_functions.len());
     }
 
     /// 过滤api，一些预装类型的function，比如Result...不在我这个crate里，肯定要过滤掉
@@ -185,6 +206,7 @@ impl<'a> ApiGraph<'a> {
         self.full_name_map = full_name_map.clone();
     }
 
+    ///找到所有可能的依赖关系，存在api_dependencies中，供后续使用
     pub(crate) fn find_all_dependencies(&mut self) {
         println!("find_dependencies");
 
@@ -241,7 +263,7 @@ impl<'a> ApiGraph<'a> {
         println!("find_dependencies finished!");
     }
 
-    pub(crate) fn default_generate_sequences(&mut self) {
+    pub(crate) fn _default_generate_sequences(&mut self) {
         //BFS + backward search
         self.generate_all_possoble_sequences(GraphTraverseAlgorithm::_BfsEndPoint);
         self._try_to_cover_unvisited_nodes();
@@ -275,7 +297,7 @@ impl<'a> ApiGraph<'a> {
                 println!("using fastbfs");
                 self.bfs(bfs_max_len, false, true);
             }
-            GraphTraverseAlgorithm::_BfsEndPoint => {
+            GraphTraverseAlgorithm::_BfsEndPoint | GraphTraverseAlgorithm::_Default => {
                 println!("using bfs end point");
                 self.bfs(bfs_max_len, true, false);
             }
@@ -301,6 +323,10 @@ impl<'a> ApiGraph<'a> {
                 self.api_sequences.clear();
                 self.reset_visited();
                 self._try_to_cover_unvisited_nodes();
+            }
+            GraphTraverseAlgorithm::_UseRealWorld => {
+                println!("using realworld to generate");
+                self.real_world();
             }
         }
     }
@@ -374,6 +400,7 @@ impl<'a> ApiGraph<'a> {
                     tmp_sequences.push(sequence.clone());
                 }
             }
+
             for sequence in &tmp_sequences {
                 //长度为len的序列，去匹配每一个函数，如果可以加入的话，就生成一个新的序列
                 let api_type = ApiType::BareFunction;
@@ -529,6 +556,184 @@ impl<'a> ApiGraph<'a> {
                 }
             }
         }
+    }
+
+    pub(crate) fn real_world(&mut self) {
+        use std::fs::File;
+        use std::io::{BufRead, BufReader};
+
+        let mut sequences = Vec::new();
+
+        //在语料库中所有API
+        let mut apis_existing_in_corpus_map = FxHashMap::default();
+
+        let seq_file_path = "/home/yxz/workspace/fuzz/experiment/url-seq-dedup.ans";
+        let file = File::open(seq_file_path).unwrap();
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            let line = line.unwrap();
+            let fields = line.split("|").into_iter().map(|x| x.to_string()).collect_vec();
+
+            // 1.解析出序列频率
+
+            let freq = fields.get(1).unwrap();
+            let cnt_str: String = freq.chars().filter(|c| c.is_digit(10)).collect();
+            let parsed_number: i32 = cnt_str.parse().unwrap();
+
+            // 2.解析sequence
+
+            let sequence = fields.last().unwrap().clone();
+            //获得api的名字
+            let functions: Vec<String> = sequence
+                .split(" ")
+                .map(|x| x.to_string())
+                .filter(|x| x.len() > 1) //过滤""
+                .collect();
+
+            //如果有任何一个在找不到，这个序列被抛弃
+            if functions.iter().any(|x| {
+                self.api_functions.iter().find(|api| api.full_name.clone() == x.clone()).is_none()
+            }) {
+                continue;
+            }
+
+            for func in functions.clone() {
+                if apis_existing_in_corpus_map.contains_key(&func) {
+                    //包含这个func，就加上去
+                    apis_existing_in_corpus_map.insert(
+                        func.clone(),
+                        apis_existing_in_corpus_map.get(&func).unwrap() + parsed_number,
+                    );
+                } else {
+                    //如果没有，就创建这个entry
+                    apis_existing_in_corpus_map.insert(func, parsed_number);
+                }
+            }
+
+            sequences.push(functions.clone());
+
+            //打印出名字
+            println!("Functions: {:?}", functions);
+        }
+
+        // check一下有没有corpus都在里面
+        //获得所有存在于corpus里面API的名字
+        for (apis, _) in &apis_existing_in_corpus_map {
+            if self
+                .api_functions
+                .iter()
+                .find(|x| x.full_name.to_owned() == apis.to_owned())
+                .is_none()
+            {
+                panic!("有corpus的API，在我们这没找到{}。", apis);
+            }
+        }
+
+        //清空所有的序列
+        self.api_sequences.clear();
+        self.reset_visited();
+        let max_len = 4;
+        if max_len < 1 {
+            return;
+        }
+
+        let mut apis_in_category1 = FxHashMap::default();
+
+        // 对于 Category 1
+        for (index, each_sequence) in sequences.iter().enumerate() {
+            println!("seq_index = {}, total = {} ", index, sequences.len());
+
+            let mut sequence = ApiSequence::new();
+            for func_path in each_sequence {
+                //找到图中对应的api
+                let f =
+                    self.api_functions.iter().enumerate().find(|(_, x)| x.full_name == *func_path);
+
+                match f {
+                    Some((api_func_index, func)) => {
+                        println!("find function, name: {}, ", func.full_name);
+
+                        let api_type = ApiType::BareFunction;
+                        sequence = if let Some(new_sequence) =
+                            self.is_fun_satisfied(&api_type, api_func_index, &sequence)
+                        {
+                            //访问到的api
+                            self.api_functions_visited[api_func_index] = true;
+
+                            //apis_existing_in_corpus_map.insert(func_path.clone(), 1);
+                            apis_in_category1.insert(func_path, 0);
+
+                            self.api_sequences.push(new_sequence.clone());
+                            new_sequence
+                        } else {
+                            break;
+                        };
+                    }
+                    None => {
+                        break;
+                    }
+                }
+            }
+        }
+
+        println!("所有被解析出来的function");
+        for func in &self.api_functions {
+            print!("{} ", func.full_name);
+        }
+        println!("打印完了");
+
+        // 对于 Category 2
+        let mut apis_in_category2_freq_map = FxHashMap::default();
+        //在下面，我们获得category2里面的元素，是String和i32的元组，对应了函数名和频率
+        for (api, freq) in &apis_existing_in_corpus_map {
+            //如果category1里面不存在，就在category2
+            if apis_in_category1.iter().find(|(x1, _)| api.clone() == ***x1.clone()).is_none() {
+                apis_in_category2_freq_map.insert(api.clone(), freq);
+            }
+        }
+
+        println!("Category2: ");
+        for (name, _) in &apis_in_category2_freq_map {
+            println!("{} ", name);
+        }
+        println!("");
+
+        for (name, _) in &apis_in_category2_freq_map {
+            if let Some((tail_api_index, _)) =
+                self.api_functions.iter().enumerate().find(|(_, x)| x.full_name == *name)
+            {
+                let mut reverse_seq =
+                    match self.reverse_construct(&ApiType::BareFunction, tail_api_index, true) {
+                        Some(x) => {
+                            if x.is_ok(self) {
+                                x
+                            } else {
+                                println!("函数 {} 出错了，无法生成对应序列", name);
+                                continue;
+                            }
+                        }
+                        None => {
+                            println!("函数 {} 无法生成对应序列", name);
+                            continue;
+                        }
+                    };
+
+                let api_seq = reverse_seq._generate_api_sequence();
+                self.api_sequences.push(api_seq);
+            }
+        }
+
+        println!(
+            "Total {} functions, {} function exist in corpus, Category1 contains {} apis, Category2 contains {} apis, Category3 contains {} apis",
+            self.api_functions.len(),
+            apis_existing_in_corpus_map.len(),
+            //apis_existing_in_corpus_map.len() - apis_in_category2.len(),
+            apis_in_category1.len(),
+            apis_in_category2_freq_map.len(),
+            self.api_functions.len() - apis_existing_in_corpus_map.len()
+        );
+
+        println!("sequences len is {}", self.api_sequences.len());
     }
 
     pub(crate) fn _choose_candidate_sequence_for_merge(&self) -> Vec<usize> {
@@ -1018,8 +1223,8 @@ impl<'a> ApiGraph<'a> {
             if !api_function_.contains_unsupported_fuzzable_type(self.cache, &self.full_name_map) {
                 valid_api_number = valid_api_number + 1;
             } //else {
-            //    println!("{}", api_function_._pretty_print(&self.full_name_map));
-            //}
+              //    println!("{}", api_function_._pretty_print(&self.full_name_map));
+              //}
         }
         //println!("total valid nodes: {}", valid_api_number);
 
@@ -1250,6 +1455,174 @@ impl<'a> ApiGraph<'a> {
                     return None;
                 }
                 return Some(new_sequence);
+            }
+        }
+    }
+
+    /// 从后往前推，做一个dfs
+    pub(crate) fn reverse_construct(
+        &self,
+        tail_api_type: &ApiType,
+        tail_api_index: usize,
+        print: bool,
+    ) -> Option<ReverseApiSequence> {
+        match tail_api_type {
+            ApiType::BareFunction => {
+                if print {
+                    println!("开始反向构造");
+                }
+                //初始化新反向序列
+                let mut new_reverse_sequence = ReverseApiSequence::new();
+
+                //let mut _moved_indexes = FxHashSet::default(); //用来保存发生move的那些语句的index
+                //let mut _multi_mut = FxHashSet::default(); //用来保存会被多次可变引用的情况
+                //let mut _immutable_borrow = FxHashSet::default(); //不可变借用
+
+                //我们为终止API创建了调用点，然后要在其中加入api_call
+                let mut api_call = ApiCall::_new(tail_api_index);
+
+                let (_, input_fun_index) = api_call.func;
+                let input_fun = &self.api_functions[input_fun_index];
+                let params = &input_fun.inputs;
+
+                println!("name: {}", input_fun.full_name);
+                sleep(Duration::from_millis(20));
+
+                //对于当前函数的param，有依赖
+                let mut param_reverse_sequences = Vec::new();
+                let mut current_param_index = 1;
+
+                //对每个都要找个参数
+                for (input_param_index_, current_ty) in params.iter().enumerate() {
+                    /*********************************************************************************************************/
+                    //如果当前参数是可fuzz的
+                    if api_util::is_fuzzable_type(current_ty, self.cache, &self.full_name_map) {
+                        //如果当前参数是fuzzable的
+                        let current_fuzzable_index = new_reverse_sequence.fuzzable_params.len();
+                        let fuzzable_call_type = fuzz_type::fuzzable_call_type(
+                            current_ty,
+                            self.cache,
+                            &self.full_name_map,
+                        );
+                        let (fuzzable_type, call_type) =
+                            fuzzable_call_type.generate_fuzzable_type_and_call_type();
+
+                        //如果出现了下面这段话，说明出现了Fuzzable参数但不知道如何参数化的
+                        //典型例子是tuple里面出现了引用（&usize），这种情况不再去寻找dependency，直接返回无法添加即可
+                        match &fuzzable_type {
+                            FuzzableType::NoFuzzable => {
+                                return None;
+                            }
+                            _ => {}
+                        }
+
+                        //判断要不要加mut tag
+                        if api_util::_need_mut_tag(&call_type) {
+                            new_reverse_sequence._insert_fuzzable_mut_tag(current_fuzzable_index);
+                        }
+
+                        //添加到sequence中去
+                        new_reverse_sequence.fuzzable_params.push(fuzzable_type);
+                        api_call._add_param(
+                            ParamType::_FuzzableType,
+                            current_fuzzable_index,
+                            call_type,
+                        );
+                    }
+                    /******************************************************************************************************** */
+                    //如果当前参数不可fuzz，只能去找依赖
+                    else {
+                        let mut dependency_flag = false;
+                        //遍历函数，看看哪个函数的output可以作为当前的param
+                        for (output_fun_index, _output_fun) in self.api_functions.iter().enumerate()
+                        {
+                            //防止死循环
+                            if output_fun_index == input_fun_index {
+                                break;
+                            }
+
+                            //检查前后是否有依赖关系
+                            //output_fun -> struct -> input_fun
+                            if let Some(dependency_index) = self.check_dependency(
+                                &ApiType::BareFunction,
+                                output_fun_index,
+                                &api_call.func.0,
+                                input_fun_index,
+                                input_param_index_,
+                            ) {
+                                let param_seq = match self.reverse_construct(
+                                    &ApiType::BareFunction,
+                                    output_fun_index,
+                                    false,
+                                ) {
+                                    Some(seq) => seq,
+                                    None => {
+                                        //没找到通路，那就看其他的api
+                                        continue;
+                                    }
+                                };
+
+                                //下面是找到了通路
+                                param_reverse_sequences.push(param_seq.clone());
+
+                                //根据dependency_index找到对应的dependency
+                                let dependency_ = self.api_dependencies[dependency_index].clone();
+
+                                //将覆盖到的边加入到新的sequence中去
+                                //好像没啥用
+                                new_reverse_sequence._add_dependency(dependency_index);
+
+                                //找到了依赖，当前参数是可以被满足的，设置flag并退出循环
+                                dependency_flag = true;
+
+                                //参数需要加mut 标记的话
+                                if api_util::_need_mut_tag(&dependency_.call_type) {
+                                    new_reverse_sequence
+                                        ._insert_function_mut_tag(current_param_index);
+                                }
+                                //如果call type是unsafe的，那么给sequence加上unsafe标记
+                                if dependency_.call_type.unsafe_call_type()._is_unsafe() {
+                                    new_reverse_sequence.set_unsafe();
+                                }
+
+                                //为api_call添加依赖
+                                api_call._add_param(
+                                    ParamType::_FunctionReturn,
+                                    current_param_index,
+                                    dependency_.call_type,
+                                );
+                                current_param_index += param_seq.functions.len();
+
+                                println!(
+                                    "找到了依赖，{}的返回值给{}",
+                                    self.api_functions[output_fun_index].full_name,
+                                    self.api_functions[input_fun_index].full_name
+                                );
+                                break;
+                            }
+                        }
+                        //如果所有函数都无法作为当前函数的前驱。。。
+                        if !dependency_flag {
+                            println!("所有函数都无法作为当前函数的前驱");
+                            return None;
+                        }
+                    }
+                    /******************************************************************************************************** */
+                }
+                //遍历完所有参数，merge所有反向序列
+
+                new_reverse_sequence.functions.push(api_call);
+
+                for seq in param_reverse_sequences {
+                    new_reverse_sequence = new_reverse_sequence.combine(seq);
+                }
+
+                if print {
+                    new_reverse_sequence.print_reverse_sequence(&self);
+
+                    println!("反向构造结束");
+                }
+                return Some(new_reverse_sequence);
             }
         }
     }

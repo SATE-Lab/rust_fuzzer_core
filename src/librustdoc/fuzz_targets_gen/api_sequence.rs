@@ -14,8 +14,10 @@ pub(crate) enum ParamType {
 }
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub(crate) struct ApiCall {
-    pub(crate) func: (ApiType, usize), //要调用的函数类型，以及在对应数组中的位置
-    pub(crate) params: Vec<(ParamType, usize, CallType)>, //参数类型(表示是使用之前的返回值，还是使用fuzzable的变量)，在当前的调用序列中参数所在的位置，以及如何调用
+    //要调用的函数类型，以及在对应数组中的位置
+    pub(crate) func: (ApiType, usize),
+    //参数类型(表示是使用之前的返回值，还是使用fuzzable的变量)，在当前的调用序列中参数所在的位置，以及如何调用
+    pub(crate) params: Vec<(ParamType, usize, CallType)>,
 }
 
 impl ApiCall {
@@ -39,6 +41,180 @@ impl ApiCall {
         call_type: CallType,
     ) {
         self.params.push((param_type, param_index, call_type));
+    }
+}
+
+//function call sequences
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) struct ReverseApiSequence {
+    //FIXME: 如何表示函数调用序列？
+    pub(crate) functions: Vec<ApiCall>, //函数调用序列,0开始是末尾函数，到时候reverse一下就是ApiSequence
+    pub(crate) fuzzable_params: Vec<FuzzableType>, //需要传入的fuzzable变量
+    pub(crate) _using_traits: Vec<String>, //需要use引入的traits的路径
+    pub(crate) _unsafe_tag: bool,       //标志这个调用序列是否需要加上unsafe标记
+    pub(crate) _moved: FxHashSet<usize>, //表示哪些返回值已经被move掉，不再能被使用，暂时不需要
+    pub(crate) _fuzzable_mut_tag: FxHashSet<usize>, //表示哪些fuzzable的变量需要带上mut标记
+    pub(crate) _function_mut_tag: FxHashSet<usize>, //表示哪些function的返回值需要带上mut标记
+    pub(crate) _covered_dependencies: FxHashSet<usize>, //表示用到了哪些dependency,即边覆盖率
+}
+
+impl ReverseApiSequence {
+    pub(crate) fn new() -> Self {
+        let functions = Vec::new();
+        let fuzzable_params = Vec::new();
+        let _using_traits = Vec::new();
+        let _unsafe_tag = false;
+        let _moved = FxHashSet::default();
+        let _fuzzable_mut_tag = FxHashSet::default();
+        let _function_mut_tag = FxHashSet::default();
+        let _covered_dependencies = FxHashSet::default();
+        ReverseApiSequence {
+            functions,
+            fuzzable_params,
+            _using_traits,
+            _unsafe_tag,
+            _moved,
+            _fuzzable_mut_tag,
+            _function_mut_tag,
+            _covered_dependencies,
+        }
+    }
+
+    pub(crate) fn print_reverse_sequence(&self, api_graph: &ApiGraph<'_>) {
+        println!("\n!!!!!!!!!!!!!!!Start to print reverse sequence");
+        for api_call in &self.functions {
+            let name = &api_graph.api_functions[api_call.func.1].full_name;
+
+            println!("func: {} | ", name);
+            for (param_type, index, _) in api_call.params.clone() {
+                print!("param:");
+                match param_type {
+                    ParamType::_FunctionReturn => {
+                        println!("FunctionReturn index: {} |", index)
+                    }
+                    ParamType::_FuzzableType => {
+                        println!("Fuzz index: {} |", index)
+                    }
+                }
+            }
+        }
+        println!("!!!!!!!!!!!!!!!End to print reverse sequence\n");
+    }
+
+    pub(crate) fn _generate_api_sequence(&mut self) -> ApiSequence {
+        let mut api_sequence = ApiSequence::new();
+
+        //反转函数
+        self.functions.reverse();
+        let api_call_num = self.functions.len();
+        for api_call in &mut self.functions {
+            let params_num = api_call.params.len();
+            //对api_call中的每个参数遍历，然后把function_index反转
+            for idx in 0..params_num {
+                let (param_type, x, call_type) = api_call.params[idx].clone();
+
+                //如果对应了函数返回值为参数，那么修改函数index
+                if param_type == ParamType::_FunctionReturn {
+                    api_call.params[idx] =
+                        (param_type.clone(), api_call_num - x - 1, call_type.clone());
+                }
+            }
+        }
+
+        //依次赋值
+        api_sequence.functions = self.functions.clone();
+        api_sequence.fuzzable_params = self.fuzzable_params.clone();
+        api_sequence._using_traits = self._using_traits.clone();
+        api_sequence._unsafe_tag = self._unsafe_tag.clone();
+        api_sequence._moved = self._moved.clone();
+        api_sequence._fuzzable_mut_tag = self._fuzzable_mut_tag.clone();
+
+        for x in &self._fuzzable_mut_tag {
+            api_sequence._function_mut_tag.insert(api_call_num - x - 1);
+        }
+
+        api_sequence._covered_dependencies = self._covered_dependencies.clone();
+
+        api_sequence
+    }
+
+    pub(crate) fn combine(&mut self, other: Self) -> Self {
+        //前面和后面的序列
+        let mut res = self.clone();
+        let mut other_sequence = other.clone();
+
+        //下面两个作为偏移量
+        //前面序列api_call的数量
+        let first_func_number = res.functions.len();
+        //前面序列fuzzable_params的数量
+        let first_fuzzable_number = res.fuzzable_params.len();
+
+        //后面的api_call要进行调整，api_call的index都变了
+        for other_function in &other_sequence.functions {
+            let other_func = other_function.func.clone();
+            let mut new_other_params = Vec::new();
+            for (param_type, index, call_type) in &other_function.params {
+                //对于两种情况的参数，处理方法不一样
+                let new_index = match param_type {
+                    ParamType::_FuzzableType => *index + first_fuzzable_number,
+                    ParamType::_FunctionReturn => *index + first_func_number,
+                };
+                new_other_params.push((param_type.clone(), new_index, call_type.clone()));
+            }
+            let new_other_function = ApiCall { func: other_func, params: new_other_params };
+            res.functions.push(new_other_function);
+        }
+        //合并fuzzable_params
+        res.fuzzable_params.append(&mut other_sequence.fuzzable_params);
+
+        //unsafe tag
+        res._unsafe_tag = res._unsafe_tag | other_sequence._unsafe_tag;
+
+        //下面的对我们现在的算法来说没什么用
+
+        //没啥用using_trait
+        res._using_traits.append(&mut other_sequence._using_traits);
+
+        //move tag
+        for move_tag in other_sequence._moved {
+            res._moved.insert(move_tag + first_func_number);
+        }
+        //fuzzable mut tag
+        for fuzzable_mut_tag in other_sequence._fuzzable_mut_tag {
+            res._fuzzable_mut_tag.insert(fuzzable_mut_tag + first_fuzzable_number);
+        }
+        //function mut tag
+        for function_mut_tag in other_sequence._function_mut_tag {
+            res._function_mut_tag.insert(function_mut_tag + first_func_number);
+        }
+        res
+    }
+
+    pub(crate) fn _add_fn_reverse(&mut self, api_call: ApiCall) {
+        self.functions.push(api_call);
+    }
+
+    pub(crate) fn _insert_fuzzable_mut_tag(&mut self, index: usize) {
+        self._fuzzable_mut_tag.insert(index);
+    }
+    pub(crate) fn _insert_function_mut_tag(&mut self, index: usize) {
+        self._function_mut_tag.insert(index);
+    }
+    pub(crate) fn _add_dependency(&mut self, dependency: usize) {
+        self._covered_dependencies.insert(dependency);
+    }
+    pub(crate) fn set_unsafe(&mut self) {
+        self._unsafe_tag = true;
+    }
+
+    //判断这个是不是合法序列，因为可能参数不完全
+    pub(crate) fn is_ok(&self, graph: &ApiGraph<'_>) -> bool {
+        for fun in &self.functions {
+            if graph.api_functions[fun.func.1].inputs.len() != fun.params.len() {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -76,6 +252,26 @@ impl ApiSequence {
             _function_mut_tag,
             _covered_dependencies,
         }
+    }
+
+    pub(crate) fn print_function(&self, graph: &ApiGraph<'_>, print: bool) -> String {
+        if print {
+            println!("##################################print sequence");
+        }
+        let mut res = String::from("");
+
+        for func in &self.functions {
+            //TODO:
+            let index = func.func.1;
+            let name = &graph.api_functions[index].full_name;
+            res.push_str(name);
+            res.push_str(" ");
+        }
+        if print {
+            println!("{}", res);
+            println!("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$end print sequence");
+        }
+        res
     }
 
     pub(crate) fn _add_fn_without_params(&mut self, api_type: &ApiType, index: usize) {
@@ -188,7 +384,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_moved(&self, index: usize) -> bool {
-        if self._moved.contains(&index) { true } else { false }
+        if self._moved.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn _insert_move_index(&mut self, index: usize) {
@@ -204,7 +404,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_fuzzable_need_mut_tag(&self, index: usize) -> bool {
-        if self._fuzzable_mut_tag.contains(&index) { true } else { false }
+        if self._fuzzable_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn _insert_function_mut_tag(&mut self, index: usize) {
@@ -212,7 +416,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_function_need_mut_tag(&self, index: usize) -> bool {
-        if self._function_mut_tag.contains(&index) { true } else { false }
+        if self._function_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn set_unsafe(&mut self) {
