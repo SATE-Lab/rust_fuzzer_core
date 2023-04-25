@@ -1,7 +1,6 @@
 use std::fs::OpenOptions;
 use std::io::Write;
 
-
 use crate::fuzz_targets_gen::extract_dep::AllDependencies;
 use crate::fuzz_targets_gen::extract_dep::{
     extract_arguments, Argument, CalleeDependency, Function,
@@ -10,7 +9,6 @@ use rustc_data_structures::fx::FxHashSet;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 use rustc_middle::ty::{self, Ty, TyCtxt};
-
 
 /// 解析序列
 pub struct ExtractSequence {
@@ -38,7 +36,6 @@ impl ExtractSequence {
             return;
         }
 
-
         // 装入所有解析的序列
         let mut all_seq = Vec::new();
         let mut visit_set = FxHashSet::default();
@@ -52,111 +49,104 @@ impl ExtractSequence {
             // 满足两个条件:
             // 1. 需要当前crate的API
             // 2. 测试每一个参数，如果有任何一个不是primitive类型的，都会成功
-            
             //if function.arguments.iter().all(|arg| arg.ty.is_primitive_ty()) {
-                // 能进入这里，说明参数都是基本类型，说明是我们的起始节点
+            // 能进入这里，说明参数都是基本类型，说明是我们的起始节点
 
-                // 下面开始dfs
-                let mut func_seq = Vec::new();
-                let mut stack = Vec::new();
+            // 下面开始dfs
+            let mut func_seq = Vec::new();
+            let mut stack = Vec::new();
 
-                //dfs的start node，初始化stack。这是一个caller
-                let function_info =
-                    FunctionInfo::new_by_caller_def_id(tcx, *caller_def_id, &*function, &all_dependencies);
-                stack.push(function_info);
+            //dfs的start node，初始化stack。这是一个caller
+            let function_info = FunctionInfo::new_by_caller_def_id(
+                tcx,
+                *caller_def_id,
+                &*function,
+                &all_dependencies,
+            );
+            stack.push(function_info);
 
-                // 开始进行dfs，使用栈来避免递归
-                while !stack.is_empty() {
+            // 开始进行dfs，使用栈来避免递归
+            while !stack.is_empty() {
+                //找到function_info（这是个caller），然后插入visit_set，表示被遍历过防止错误。
+                let function_info = stack.pop().unwrap();
+                if let CallerOrCallee::Caller { dependency_info, .. } = function_info.content {
+                    visit_set.insert(tcx.def_path_str(function_info.def_id));
+                    //let caller_def_id = function_info.def_id;
 
-                    //找到function_info（这是个caller），然后插入visit_set，表示被遍历过防止错误。
-                    let function_info = stack.pop().unwrap();
-                    if let CallerOrCallee::Caller { 
-                        dependency_info, ..
-                    } = function_info.content{ 
-                        visit_set.insert(tcx.def_path_str(function_info.def_id));
-                        //let caller_def_id = function_info.def_id;
-                        
-                        
-                        //下面对于每一个被调用函数进行遍历
-                        let callee_dependency = 
-                            dependency_info.callee_dependencies.clone();
-                        for CalleeDependency { callee, callsite, .. } in callee_dependency {
-                            use super::extract_dep::Callee;
-                            
+                    //下面对于每一个被调用函数进行遍历
+                    let callee_dependency = dependency_info.callee_dependencies.clone();
+                    for CalleeDependency { callee, callsite, .. } in callee_dependency {
+                        use super::extract_dep::Callee;
 
-                            //被调用函数对应的crate_name和DefId
-                            let (_crate_name, callee_def_id) = match callee {
-                                Callee::DirectCall(def_id) => {
-                                    (tcx.crate_name(def_id.krate).as_str().to_string(), def_id)
-                                }
-                                Callee::LocalFunctionPtr(_) => continue, //跳过
-                            };
-
-
-                            // 如果当前的callsite参数都是primitive type的话，把上一个序列终结，开始新序列
-                            if callsite.argument_tys.iter().all(|ty| ty.is_primitive_ty()) {
-                                if !func_seq.is_empty() {
-                                    all_seq.push(func_seq.clone());
-                                    func_seq.clear();
-                                }
+                        //被调用函数对应的crate_name和DefId
+                        let (_crate_name, callee_def_id) = match callee {
+                            Callee::DirectCall(def_id) => {
+                                (tcx.crate_name(def_id.krate).as_str().to_string(), def_id)
                             }
+                            Callee::LocalFunctionPtr(_) => continue, //跳过
+                        };
 
-                            /*println!(
-                                "caller_name {}, callee_name {}",
-                                tcx.def_path_str(caller_def_id),
-                                tcx.def_path_str(callsite_def_id),
-                            );*/
+                        // 如果当前的callsite参数都是primitive type的话，把上一个序列终结，开始新序列
+                        if callsite.argument_tys.iter().all(|ty| ty.is_primitive_ty()) {
+                            if !func_seq.is_empty() {
+                                all_seq.push(func_seq.clone());
+                                func_seq.clear();
+                            }
+                        }
 
+                        /*println!(
+                            "caller_name {}, callee_name {}",
+                            tcx.def_path_str(caller_def_id),
+                            tcx.def_path_str(callsite_def_id),
+                        );*/
 
-                            let callee_name = tcx.def_path_str(callee_def_id);
-                            //if crate_name.starts_with(&test_crate_name) {
-                            if callee_name.starts_with(&test_crate_name){
-                                // 如果是test crate的api，推入序列    
-                                
-                                func_seq.push(callee_name);
+                        let callee_name = tcx.def_path_str(callee_def_id);
+                        //if crate_name.starts_with(&test_crate_name) {
+                        if callee_name.starts_with(&test_crate_name) {
+                            // 如果是test crate的api，推入序列
 
-                                //如果callsite的返回值是基本类型，就截取这个
-                                if callsite.return_ty.is_primitive_ty() {
-                                    all_seq.push(func_seq.clone());
-                                    func_seq.clear();
-                                }
+                            func_seq.push(callee_name);
 
-                            } else {
-                                // 如果是是当前crate的local函数，那么就入栈
-                                
-                                if let Some(_) = FunctionInfo::new_by_callee_def_id(
-                                    tcx,
-                                    callee_def_id,
-                                    &all_dependencies,
-                                ) {
-                                    // 一种剪枝
-                                    if !visit_set
-                                        .contains(&tcx.def_path_str(callee_def_id).to_string())
-                                    {
-                                        //既然是local的函数，那么一定可以在all_dependencies里面找到，否则就出了bug
-                                        let function = all_dependencies.functions.get(&callee_def_id).unwrap();
-                                        let info 
-                                            = FunctionInfo::new_by_caller_def_id(
-                                                tcx, 
-                                                callee_def_id, 
-                                                function, 
-                                                &all_dependencies
-                                            );
-                                        // 存入stack供下次遍历
-                                        stack.push(info);
-                                    }
+                            //如果callsite的返回值是基本类型，就截取这个
+                            if callsite.return_ty.is_primitive_ty() {
+                                all_seq.push(func_seq.clone());
+                                func_seq.clear();
+                            }
+                        } else {
+                            // 如果是是当前crate的local函数，那么就入栈
+
+                            if let Some(_) = FunctionInfo::new_by_callee_def_id(
+                                tcx,
+                                callee_def_id,
+                                &all_dependencies,
+                            ) {
+                                // 一种剪枝
+                                if !visit_set.contains(&tcx.def_path_str(callee_def_id).to_string())
+                                {
+                                    //既然是local的函数，那么一定可以在all_dependencies里面找到，否则就出了bug
+                                    let function =
+                                        all_dependencies.functions.get(&callee_def_id).unwrap();
+                                    let info = FunctionInfo::new_by_caller_def_id(
+                                        tcx,
+                                        callee_def_id,
+                                        function,
+                                        &all_dependencies,
+                                    );
+                                    // 存入stack供下次遍历
+                                    stack.push(info);
                                 }
                             }
                         }
+                    }
                 }
-                }
+            }
 
-                // dfs完毕，开始进行结束处理
-                if !func_seq.is_empty() {
-                    all_seq.push(func_seq);
-                }
+            // dfs完毕，开始进行结束处理
+            if !func_seq.is_empty() {
+                all_seq.push(func_seq);
+            }
 
-                // 结束
+            // 结束
             //}
         }
 
@@ -169,9 +159,9 @@ impl ExtractSequence {
         }
 
         println!("\x1b[94mStart to print sequence");
-        
-        let mut file = OpenOptions::new().create(true).append(true).open(dir_path).expect(
-            "cannot open file");
+
+        let mut file =
+            OpenOptions::new().create(true).append(true).open(dir_path).expect("cannot open file");
         for (idx, seq) in self.all_sequence.iter().enumerate() {
             let s = format!("Sequence {}: ", idx);
             println!("{}", s);
@@ -185,7 +175,6 @@ impl ExtractSequence {
             //写入回车
             println!("");
             file.write_all("\n".as_bytes()).expect("write failed");
-        
         }
         println!("Finish printing\x1b[0m");
     }
@@ -197,27 +186,24 @@ pub struct FunctionInfo<'tcx> {
     def_id: DefId,
     content: CallerOrCallee<'tcx>,
     //mir: mir::Body<'tcx>,
-    
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-enum CallerOrCallee<'tcx>{
-    Caller{
-        mir: mir::Body<'tcx>, 
+enum CallerOrCallee<'tcx> {
+    Caller {
+        mir: mir::Body<'tcx>,
         return_ty: Ty<'tcx>,
         arguments: Vec<Argument<'tcx>>,
         dependency_info: Function<'tcx>,
     },
-    Callee{fn_sig:ty::FnSig<'tcx>},
+    Callee {
+        fn_sig: ty::FnSig<'tcx>,
+    },
 }
-
-
-
 
 #[allow(dead_code)]
 impl FunctionInfo<'_> {
-
     /// 判断函数是否是当前crate的
     pub fn is_local(&self) -> bool {
         self.def_id.as_local().is_some()
@@ -230,7 +216,6 @@ impl FunctionInfo<'_> {
         function: &Function<'tcx>,
         all_dependencies: &'a AllDependencies<'tcx>,
     ) -> FunctionInfo<'tcx> {
-
         let mir = function.mir.to_owned();
 
         // 返回值
@@ -246,14 +231,9 @@ impl FunctionInfo<'_> {
             .1)
             .clone();
 
-        FunctionInfo { 
-            def_id, 
-            content: CallerOrCallee::Caller { 
-                mir, 
-                return_ty, 
-                arguments, 
-                dependency_info 
-            }, 
+        FunctionInfo {
+            def_id,
+            content: CallerOrCallee::Caller { mir, return_ty, arguments, dependency_info },
         }
     }
 
@@ -275,11 +255,7 @@ impl FunctionInfo<'_> {
             }
         };
 
-
-        fn get_function_signature<'tcx>(
-            tcx: TyCtxt<'tcx>,
-            def_id: DefId,
-        ) -> ty::FnSig<'tcx> {
+        fn get_function_signature<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> ty::FnSig<'tcx> {
             let fn_type = tcx.fn_sig(def_id);
             let fn_type = fn_type.skip_binder();
             fn_type
@@ -288,8 +264,6 @@ impl FunctionInfo<'_> {
 
         let def_id = local_def_id.to_def_id();
         //Some(FunctionInfo { def_id, mir, return_ty, arguments, dependency_info })
-        Some(FunctionInfo { def_id, 
-            content: CallerOrCallee::Callee { fn_sig }
-        })
+        Some(FunctionInfo { def_id, content: CallerOrCallee::Callee { fn_sig } })
     }
 }
