@@ -627,7 +627,7 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
                             }
                         }
                 }).collect_vec();
-            /* 
+            /*
             for callsite in &callsites {
                 if let Some(return_local) = callsite.return_variable{
                     if return_local == from{
