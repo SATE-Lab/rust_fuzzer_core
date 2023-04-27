@@ -158,7 +158,7 @@ impl ExtractSequence {
             return;
         }
 
-        println!("\x1b[94mStart to print sequence");
+        println!("\x1b[94mStart to print sequence\x1b[0m");
 
         let mut file =
             OpenOptions::new().create(true).append(true).open(dir_path).expect("cannot open file");
@@ -176,7 +176,7 @@ impl ExtractSequence {
             println!("");
             file.write_all("\n".as_bytes()).expect("write failed");
         }
-        println!("Finish printing\x1b[0m");
+        println!("\x1b[94mFinish printing\x1b[0m");
     }
 }
 

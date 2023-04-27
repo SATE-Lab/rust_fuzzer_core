@@ -1,4 +1,5 @@
 use bit_vec::BitVec;
+use itertools::Itertools;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::def;
 use rustc_hir::def_id::DefId;
@@ -243,6 +244,12 @@ impl<'tcx> LocalDependencies<'tcx> {
             BitVec::from_elem(locals_count + constants.len(), false),
             locals_count,
         );
+
+        //自己依赖自己 i->i
+        for i in 0..locals_count {
+            dependencies[Local::from_usize(i)].set(i, true);
+        }
+
         let mut search_constants = Assignments::new(locals_count, &constants, &mut dependencies);
         search_constants.visit_body(function_body);
 
@@ -299,7 +306,7 @@ impl<'tcx> LocalDependencies<'tcx> {
         let mut previous_iteration = BitVec::from_elem(dependencies.len() + constants.len(), false);
 
         for index in 0..dependencies.len() {
-            // Safely extract a mutable reference from the dependency list, then iterate (imutably
+            // Safely extract a mutable reference from the dependency list, then iterate (imutably)
             // of the other dependencies
             let (left, rest) = dependencies.raw.split_at_mut(index);
             let (deps1, right) = rest.split_first_mut().unwrap();
@@ -394,11 +401,11 @@ pub struct CallSite<'tcx> {
     function: LocalCallType,
 
     /// 被调用函数的返回值会传递给的局部变量，如果有就是 Some(...)，否则 None
-    return_variable: Option<mir::Local>,
+    pub return_variable: Option<mir::Local>,
     pub return_ty: Ty<'tcx>,
 
     /// 被调用函数的实参对应的局部变量
-    arguments: Vec<mir::Operand<'tcx>>,
+    pub arguments: Vec<mir::Operand<'tcx>>,
     pub argument_tys: Vec<Ty<'tcx>>,
 }
 
@@ -575,13 +582,15 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
         //  - caller的参数
         //  - 某个常量constants（这个常量可能是某个函数）
         //  - the return value of called functions
+        //FIXME:
         let get_origins = |from: mir::Local| /* -> impl Iterator<Item=Source> */ {
-            deps.dependencies(from)
+            //println!("local: {}", from.as_u32());
+            let sources = deps.dependencies(from)
                 .filter_map(|dep| {
                     use DependencyType::*;
                     match dep {
                         Return => {
-                            // it's a recursive function
+                            // FIXME:it's a recursive function??????????????
                             Some(Source::ReturnVariable(caller))
                         },
                         Argument(arg) => {
@@ -617,13 +626,30 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
                                 None
                             }
                         }
-                })
+                }).collect_vec();
+            /* 
+            for callsite in &callsites {
+                if let Some(return_local) = callsite.return_variable{
+                    if return_local == from{
+                        let callee_def_id = match callsite.function{
+                            LocalCallType::DirectCall(callee_def_id) => callee_def_id.clone(),
+                            LocalCallType::LocalFunctionPtr(_) => panic!("todo"),
+                        };
+
+                        let src = Source::ReturnVariable(callee_def_id);
+                        sources.push(src);
+                    }
+                }
+            }*/
+            sources.into_iter()
         };
 
         let return_deps = get_origins(mir::Local::from_usize(0)).collect();
 
         let mut callee_dependencies = Vec::new();
         for callsite in &callsites {
+            //FIXME:
+            //println!("开始解析一个调用点");
             let mut arg_sources = FxHashMap::default();
 
             for (index, arg) in callsite.arguments.iter().enumerate() {
@@ -634,6 +660,7 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
                     Copy(place) | Move(place) => {
                         for source in get_origins(place.local) {
                             //普通类型就把依赖推进去即可
+                            //println!("成功");
                             sources.push(source);
                         }
                     }
@@ -650,10 +677,15 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
 
             use LocalCallType::*;
             let callee = match callsite.function {
-                DirectCall(callee) => Callee::DirectCall(callee),
+                DirectCall(callee) => {
+                    //FIXME:
+                    //println!("callsite: {}", tcx.def_path_str(callee));
+
+                    Callee::DirectCall(callee)
+                }
                 LocalFunctionPtr(ptr) => Callee::LocalFunctionPtr(get_origins(ptr).collect()),
             };
-
+            //println!("结束解析一个调用点\n");
             //存入每个调用点的参数依赖关系！
             callee_dependencies.push(CalleeDependency {
                 arg_sources,
@@ -713,7 +745,7 @@ pub fn print_all_dependencies<'tcx>(
                     let callee_name = tcx.def_path_str(id);
                     println!("[{}] calls [{}]", caller_name, callee_name);
 
-                    println!("待做");
+                    //println!("待做");
 
                     //use super::extract_seq::FunctionInfo;
                     //let info = FunctionInfo::new(tcx, id.as_local().unwrap());
