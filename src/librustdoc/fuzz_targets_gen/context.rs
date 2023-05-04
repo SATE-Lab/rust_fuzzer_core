@@ -100,7 +100,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
 
                 extract_sequemce.print_sequence(
                     enable,
-                    "/home/yxz/workspace/fuzz/experiment/url-seq",
+                    "/home/yxz/workspace/fuzz/experiment_root/",
                     "url",
                 );
             });
