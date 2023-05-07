@@ -146,7 +146,8 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             }else{
                 api_graph.default_generate_sequences();
             }*/
-            api_graph.generate_all_possoble_sequences(generation_strategy);
+            api_graph
+                .generate_all_possoble_sequences(generation_strategy, krate.name(tcx).as_str());
 
             //print_message::_print_generic_functions(&api_dependency_graph);
             //println!("total functions in crate : {:?}", api_graph.api_functions.len());

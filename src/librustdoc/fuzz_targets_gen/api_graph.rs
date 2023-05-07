@@ -263,16 +263,20 @@ impl<'a> ApiGraph<'a> {
         println!("find_dependencies finished!");
     }
 
-    pub(crate) fn _default_generate_sequences(&mut self) {
+    pub(crate) fn _default_generate_sequences(&mut self, lib_name: &str) {
         //BFS + backward search
-        self.generate_all_possoble_sequences(GraphTraverseAlgorithm::_BfsEndPoint);
+        self.generate_all_possoble_sequences(GraphTraverseAlgorithm::_BfsEndPoint, lib_name);
         self._try_to_cover_unvisited_nodes();
 
         // backward search
         //self.generate_all_possoble_sequences(GraphTraverseAlgorithm::_DirectBackwardSearch);
     }
 
-    pub(crate) fn generate_all_possoble_sequences(&mut self, algorithm: GraphTraverseAlgorithm) {
+    pub(crate) fn generate_all_possoble_sequences(
+        &mut self,
+        algorithm: GraphTraverseAlgorithm,
+        lib_name: &str,
+    ) {
         //BFS序列的最大长度：即为函数的数量,或者自定义
         //let bfs_max_len = self.api_functions.len();
         let bfs_max_len = 3;
@@ -326,7 +330,7 @@ impl<'a> ApiGraph<'a> {
             }
             GraphTraverseAlgorithm::_UseRealWorld => {
                 println!("using realworld to generate");
-                self.real_world();
+                self.real_world(lib_name);
             }
         }
     }
@@ -558,7 +562,7 @@ impl<'a> ApiGraph<'a> {
         }
     }
 
-    pub(crate) fn real_world(&mut self) {
+    pub(crate) fn real_world(&mut self, lib_name: &str) {
         use std::fs::File;
         use std::io::{BufRead, BufReader};
 
@@ -567,7 +571,8 @@ impl<'a> ApiGraph<'a> {
         //在语料库中所有API
         let mut apis_existing_in_corpus_map = FxHashMap::default();
 
-        let seq_file_path = "/home/yxz/workspace/fuzz/experiment/url-seq-dedup.ans";
+        let seq_file_path =
+            format!("/home/yxz/workspace/fuzz/experiment_root/{}/seq-dedup.ans", lib_name);
         let file = File::open(seq_file_path).unwrap();
         let reader = BufReader::new(file);
         for line in reader.lines() {
@@ -1223,8 +1228,8 @@ impl<'a> ApiGraph<'a> {
             if !api_function_.contains_unsupported_fuzzable_type(self.cache, &self.full_name_map) {
                 valid_api_number = valid_api_number + 1;
             } //else {
-            //    println!("{}", api_function_._pretty_print(&self.full_name_map));
-            //}
+              //    println!("{}", api_function_._pretty_print(&self.full_name_map));
+              //}
         }
         //println!("total valid nodes: {}", valid_api_number);
 
