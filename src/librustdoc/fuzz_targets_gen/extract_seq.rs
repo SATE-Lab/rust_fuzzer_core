@@ -154,7 +154,7 @@ impl ExtractSequence {
         self.all_sequence = all_seq;
     }
 
-    pub fn extract_sequence_new<'tcx>(
+    pub fn _extract_sequence_new<'tcx>(
         &mut self,
         tcx: TyCtxt<'tcx>,
         current_crate_name: String,

@@ -8,14 +8,14 @@ use std::path::PathBuf;
 
 use super::api_graph::GraphTraverseAlgorithm;
 
-fn generate_fuzz_file_path(dir_name: &str) -> String {
-    format!("/home/yxz/workspace/fuzz/fuzz_file_dir/{}", dir_name)
+fn generate_fuzz_file_path(lib_name: &str, test_dir_path: &str) -> String {
+    format!("/home/yxz/workspace/fuzz/experiment_root/{}/fuzz_file_dir/{}", lib_name, test_dir_path)
 }
 
 lazy_static! {
     static ref DEFAULT_CRATE_TEST_DIR: FxHashMap<&'static str, String> = {
         let mut m = FxHashMap::default();
-        m.insert("url", generate_fuzz_file_path("default_url_afl_work"));
+        m.insert("url", generate_fuzz_file_path("url", "default_url_afl_work"));
         /*m.insert("regex_syntax", "/Users/yxz/workspace/fuzz/fuzz_dir/regex-syntax-afl-work");
         m.insert("semver_parser", "/Users/yxz/workspace/fuzz/fuzz_dir/semver-parser-afl-work");
         m.insert("bat", "/Users/yxz/workspace/fuzz/fuzz_dir/bat-afl-work");
@@ -47,7 +47,7 @@ lazy_static! {
 lazy_static! {
     static ref REAL_WORLD_CRATE_TEST_DIR: FxHashMap<&'static str, String> = {
         let mut m = FxHashMap::default();
-        m.insert("url", generate_fuzz_file_path("real_world_url_afl_work"));
+        m.insert("url", generate_fuzz_file_path("url", "real_world_url_afl_work"));
         m
     };
 }
@@ -55,7 +55,7 @@ lazy_static! {
 lazy_static! {
     static ref RANDOM_TEST_DIR: FxHashMap<&'static str, String> = {
         let mut m = FxHashMap::default();
-        m.insert("url", generate_fuzz_file_path("url_random_work"));
+        m.insert("url", generate_fuzz_file_path("url", "url_random_work"));
         //m.insert("regex", "/Users/yxz/workspace/fuzz/random_work/regex-work");
         //m.insert("time", "/Users/yxz/workspace/fuzz/random_work/time-work");
         m
