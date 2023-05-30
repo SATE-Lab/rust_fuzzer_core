@@ -328,15 +328,25 @@ pub(crate) fn fuzzable_call_type(
         clean::Type::Generic(s) => {
             println!("generic type = {:?}", s);
             //FIXME:
-            FuzzableCallType::NoFuzzable
+
+            match substitution {
+                Some(typ) => {
+                    //目前泛型替换类型只支持基本类型
+                    assert!(if let clean::Type::Primitive(_) = typ { true } else { false });
+                    return fuzzable_call_type(typ, cache, full_name_map, None);
+                }
+                None => FuzzableCallType::NoFuzzable,
+            }
         }
         clean::Type::Primitive(primitive_type) => {
             FuzzableCallType::Primitive(primitive_type.clone())
         }
+
+        //外部函数，不支持
         clean::Type::BareFunction(..) => FuzzableCallType::NoFuzzable,
-        clean::Type::Tuple(types) => {
+        clean::Type::Tuple(inner_types) => {
             let mut vec = Vec::new();
-            for inner_type in types {
+            for inner_type in inner_types {
                 let inner_fuzzable =
                     fuzzable_call_type(inner_type, cache, full_name_map, substitution);
                 match inner_fuzzable {
