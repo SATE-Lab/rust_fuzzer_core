@@ -1232,9 +1232,10 @@ impl<'a> ApiGraph<'a> {
         for api_function_ in &self.api_functions {
             if !api_function_.contains_unsupported_fuzzable_type(self.cache, &self.full_name_map) {
                 valid_api_number = valid_api_number + 1;
-            } //else {
-              //    println!("{}", api_function_._pretty_print(&self.full_name_map));
-              //}
+            }
+            //else {
+            //    println!("{}", api_function_._pretty_print(&self.full_name_map));
+            //}
         }
         //println!("total valid nodes: {}", valid_api_number);
 
