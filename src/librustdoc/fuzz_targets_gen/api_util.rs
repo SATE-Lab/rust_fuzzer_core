@@ -7,6 +7,7 @@ use crate::fuzz_targets_gen::prelude_type::{self, PreludeType};
 use rustc_hir::{self, Mutability};
 use thin_vec::ThinVec;
 
+/// 解析参数类型
 pub(crate) fn _extract_input_types(inputs: &clean::Arguments) -> Vec<clean::Type> {
     let mut input_types = Vec::new();
     for argument in &inputs.values {
@@ -15,7 +16,7 @@ pub(crate) fn _extract_input_types(inputs: &clean::Arguments) -> Vec<clean::Type
     }
     input_types
 }
-
+/// 解析返回值类型
 pub(crate) fn _extract_output_type(output: &clean::FnRetTy) -> Option<clean::Type> {
     match output {
         clean::FnRetTy::Return(ty) => Some(ty.clone()),
@@ -23,6 +24,7 @@ pub(crate) fn _extract_output_type(output: &clean::FnRetTy) -> Option<clean::Typ
     }
 }
 
+/// 判断一个Type是否是泛型
 pub(crate) fn _is_generic_type(ty: &clean::Type) -> bool {
     //FIXME: self不需要考虑，因为在产生api function的时候就已经完成转换，但需要考虑类型嵌套的情况
     match ty {
@@ -41,6 +43,7 @@ pub(crate) fn _is_generic_type(ty: &clean::Type) -> bool {
                             }
                         }
                     }
+                    //其实我不打算考虑这个
                     clean::GenericArgs::Parenthesized { inputs, output } => {
                         for input_ty in inputs.iter() {
                             if _is_generic_type(input_ty) {
@@ -73,6 +76,7 @@ pub(crate) fn _is_generic_type(ty: &clean::Type) -> bool {
             return _is_generic_type(inner_type);
         }
         _ => {
+            //infer, qpath, impltrait不考虑！！！！
             //FIXME: implTrait是否当作泛型呢？QPath是否当作泛型呢？
             //如果有不支持的类型，也可以往这个函数里面丢，会在将函数加到图里面的时候最后过滤一遍
             return false;
@@ -95,6 +99,7 @@ pub(crate) fn _is_end_type(ty: &clean::Type, cache: &Cache, full_name_map: &Full
         }
         clean::Type::Generic(_s) => {
             //println!("generic type = {:?}", s);
+            //FIXME: 泛型肯定不是它可以成为结构体
             false
         }
         clean::Type::Primitive(_) => true,
@@ -610,8 +615,9 @@ pub(crate) fn is_fuzzable_type(
     ty_: &clean::Type,
     cache: &Cache,
     full_name_map: &FullNameMap,
+    substitution: Option<&clean::Type>,
 ) -> bool {
-    let fuzzable = fuzz_type::fuzzable_call_type(ty_, cache, full_name_map);
+    let fuzzable = fuzz_type::fuzzable_call_type(ty_, cache, full_name_map, substitution);
     match fuzzable {
         FuzzableCallType::NoFuzzable => false,
         _ => true,

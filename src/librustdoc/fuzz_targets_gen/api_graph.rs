@@ -702,13 +702,16 @@ impl<'a> ApiGraph<'a> {
             println!("{} ", name);
         }
         println!("");
-
-        for (name, _) in &apis_in_category2_freq_map {
-            if let Some((tail_api_index, _)) =
-                self.api_functions.iter().enumerate().find(|(_, x)| x.full_name == *name)
-            {
-                let mut reverse_seq =
-                    match self.reverse_construct(&ApiType::BareFunction, tail_api_index, true) {
+        if false {
+            for (name, _) in &apis_in_category2_freq_map {
+                if let Some((tail_api_index, _)) =
+                    self.api_functions.iter().enumerate().find(|(_, x)| x.full_name == *name)
+                {
+                    let mut reverse_seq = match self.reverse_construct(
+                        &ApiType::BareFunction,
+                        tail_api_index,
+                        true,
+                    ) {
                         Some(x) => {
                             if x.is_ok(self) {
                                 x
@@ -723,8 +726,9 @@ impl<'a> ApiGraph<'a> {
                         }
                     };
 
-                let api_seq = reverse_seq._generate_api_sequence();
-                self.api_sequences.push(api_seq);
+                    let api_seq = reverse_seq._generate_api_sequence();
+                    self.api_sequences.push(api_seq);
+                }
             }
         }
 
@@ -797,7 +801,8 @@ impl<'a> ApiGraph<'a> {
                 let input_param_num = inputs.len();
                 for i in 0..input_param_num {
                     let input_type = &inputs[i];
-                    if api_util::is_fuzzable_type(input_type, self.cache, &self.full_name_map) {
+                    if api_util::is_fuzzable_type(input_type, self.cache, &self.full_name_map, None)
+                    {
                         continue;
                     }
                     let mut can_find_dependency_flag = false;
@@ -1228,8 +1233,8 @@ impl<'a> ApiGraph<'a> {
             if !api_function_.contains_unsupported_fuzzable_type(self.cache, &self.full_name_map) {
                 valid_api_number = valid_api_number + 1;
             } //else {
-            //    println!("{}", api_function_._pretty_print(&self.full_name_map));
-            //}
+              //    println!("{}", api_function_._pretty_print(&self.full_name_map));
+              //}
         }
         //println!("total valid nodes: {}", valid_api_number);
 
@@ -1322,13 +1327,15 @@ impl<'a> ApiGraph<'a> {
                 }
                 //对于每个参数进行遍历
                 for (i, current_ty) in input_params.iter().enumerate() {
-                    if api_util::is_fuzzable_type(current_ty, self.cache, &self.full_name_map) {
+                    if api_util::is_fuzzable_type(current_ty, self.cache, &self.full_name_map, None)
+                    {
                         //如果当前参数是fuzzable的
                         let current_fuzzable_index = new_sequence.fuzzable_params.len();
                         let fuzzable_call_type = fuzz_type::fuzzable_call_type(
                             current_ty,
                             self.cache,
                             &self.full_name_map,
+                            None,
                         );
                         let (fuzzable_type, call_type) =
                             fuzzable_call_type.generate_fuzzable_type_and_call_type();
@@ -1501,13 +1508,15 @@ impl<'a> ApiGraph<'a> {
                 for (input_param_index_, current_ty) in params.iter().enumerate() {
                     /*********************************************************************************************************/
                     //如果当前参数是可fuzz的
-                    if api_util::is_fuzzable_type(current_ty, self.cache, &self.full_name_map) {
+                    if api_util::is_fuzzable_type(current_ty, self.cache, &self.full_name_map, None)
+                    {
                         //如果当前参数是fuzzable的
                         let current_fuzzable_index = new_reverse_sequence.fuzzable_params.len();
                         let fuzzable_call_type = fuzz_type::fuzzable_call_type(
                             current_ty,
                             self.cache,
                             &self.full_name_map,
+                            None,
                         );
                         let (fuzzable_type, call_type) =
                             fuzzable_call_type.generate_fuzzable_type_and_call_type();

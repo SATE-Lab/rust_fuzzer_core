@@ -48,6 +48,19 @@ lazy_static! {
     static ref REAL_WORLD_CRATE_TEST_DIR: FxHashMap<&'static str, String> = {
         let mut m = FxHashMap::default();
         m.insert("url", generate_fuzz_file_path("url", "real_world_url_afl_work"));
+        m.insert("regex", generate_fuzz_file_path("regex", "real_world_regex_afl_work"));
+        m.insert("tui", generate_fuzz_file_path("tui", "real_world_tui_afl_work"));
+        m.insert("time", generate_fuzz_file_path("time", "real_world_time_afl_work"));
+        m.insert("clap", generate_fuzz_file_path("clap", "real_world_clap_afl_work"));
+        m.insert(
+            "unicode-segmentation",
+            generate_fuzz_file_path("unicode-segmentation", "real_world_afl_work"),
+        );
+        m.insert("chrono", generate_fuzz_file_path("chrono", "real_world_afl_work"));
+        m.insert("byteorder", generate_fuzz_file_path("byteorder", "real_world_afl_work"));
+        m.insert("bytes", generate_fuzz_file_path("bytes", "real_world_afl_work"));
+        m.insert("csv", generate_fuzz_file_path("csv", "real_world_afl_work"));
+
         m
     };
 }
@@ -137,7 +150,7 @@ pub(crate) struct FileHelper {
 impl FileHelper {
     /// 进行初始化工作
     pub(crate) fn new(api_graph: &ApiGraph<'_>, strategy: GraphTraverseAlgorithm) -> Self {
-        let crate_name = api_graph._crate_name.clone();
+        let crate_name = api_graph._crate_name.clone().replace("_", "-");
 
         //按照不同策略生成在不同的文件夹里
         let test_dir = match strategy {

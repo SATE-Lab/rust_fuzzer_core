@@ -93,7 +93,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 extract_sequemce.extract_sequence(
                     tcx,
                     krate.name(tcx).to_string(),
-                    "url".to_string(),
+                    "csv".to_string(),
                     all_dependencies,
                     enable,
                 );
@@ -101,7 +101,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 extract_sequemce.print_sequence(
                     enable,
                     "/home/yxz/workspace/fuzz/experiment_root/",
-                    "url",
+                    "csv",
                 );
             });
 
@@ -115,10 +115,13 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 "\nStart to parse tested crate and generate test file.\nThe name of the tested crate is {}.",
                 krate.name(tcx)
             );
-            if krate.name(tcx).to_string() != "url" {
+            /*
+            if krate.name(tcx).to_string() != "csv" {
+                println!("不对");
                 return Ok((cx, krate));
-            }
+            }*/
 
+            // 新建一个API依赖图
             let mut api_graph = ApiGraph::new(&krate.name(tcx).to_string(), cx.cache());
             let mut full_name_map = impl_util::FullNameMap::new();
 
@@ -146,13 +149,19 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             }else{
                 api_graph.default_generate_sequences();
             }*/
-            api_graph
-                .generate_all_possoble_sequences(generation_strategy, krate.name(tcx).as_str());
+            api_graph.generate_all_possoble_sequences(
+                generation_strategy,
+                krate.name(tcx).as_str().replace("_", "-").as_str(),
+            );
 
             //print_message::_print_generic_functions(&api_dependency_graph);
             //println!("total functions in crate : {:?}", api_graph.api_functions.len());
 
-            if file_util::can_write_to_file(&api_graph._crate_name, generation_strategy) {
+            if file_util::can_write_to_file(
+                &api_graph._crate_name.replace("_", "-"),
+                //&"unicode-segmentation".to_owned(),
+                generation_strategy,
+            ) {
                 //whether to use random strategy
                 let file_helper = file_util::FileHelper::new(&api_graph, generation_strategy);
                 //println!("file_helper:{:?}", file_helper);

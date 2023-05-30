@@ -16,18 +16,6 @@ pub(crate) enum ApiUnsafety {
     Normal,
 }
 
-/// 用来标识API图中的API
-#[derive(Clone, Debug)]
-pub(crate) struct ApiFunction {
-    pub(crate) full_name: String,                //函数名，要来比较是否相等
-    pub(crate) _generics: clean::Generics,       // 泛型
-    pub(crate) inputs: Vec<clean::Type>,         //输入的参数
-    pub(crate) output: Option<clean::Type>,      //返回值
-    pub(crate) _trait_full_path: Option<String>, //Trait的全限定路径,因为使用trait::fun来调用函数的时候，需要将trait的全路径引入
-    pub(crate) _unsafe_tag: ApiUnsafety,         //是否unsafe
-    pub(crate) visibility: Visibility,           //可见性
-}
-
 impl ApiUnsafety {
     //辅助构造函数作用，标识函数是否是unsafe
     pub(crate) fn _get_unsafety_from_fnheader(fn_header: &rustc_hir::FnHeader) -> Self {
@@ -45,6 +33,18 @@ impl ApiUnsafety {
             ApiUnsafety::Normal => false,
         }
     }
+}
+
+/// 用来标识API图中的API
+#[derive(Clone, Debug)]
+pub(crate) struct ApiFunction {
+    pub(crate) full_name: String,                //函数名，要来比较是否相等
+    pub(crate) _generics: clean::Generics,       // 泛型
+    pub(crate) inputs: Vec<clean::Type>,         //输入的参数
+    pub(crate) output: Option<clean::Type>,      //返回值
+    pub(crate) _trait_full_path: Option<String>, //Trait的全限定路径,因为使用trait::fun来调用函数的时候，需要将trait的全路径引入
+    pub(crate) _unsafe_tag: ApiUnsafety,         //是否unsafe
+    pub(crate) visibility: Visibility,           //可见性
 }
 
 impl ApiFunction {
@@ -129,41 +129,20 @@ impl ApiFunction {
 
     /// 是否有返回值
     pub(crate) fn _has_no_output(&self) -> bool {
-        match self.output {
-            None => true,
-            Some(_) => false,
-        }
-    }
-
-    /// 打印函数
-    pub(crate) fn _pretty_print(&self, cache: &Cache, full_name_map: &FullNameMap) -> String {
-        let mut fn_line = format!("fn {}(", self.full_name);
-        let input_len = self.inputs.len();
-        for i in 0..input_len {
-            let input_type = &self.inputs[i];
-            if i != 0 {
-                fn_line.push_str(" ,");
-            }
-            fn_line.push_str(api_util::_type_name(input_type, cache, full_name_map).as_str());
-        }
-        fn_line.push_str(")");
-        if let Some(ref ty_) = self.output {
-            fn_line.push_str("->");
-            fn_line.push_str(api_util::_type_name(ty_, cache, full_name_map).as_str());
-        }
-        fn_line
+        self.output.is_none()
     }
 
     /// 是否包含了未支持的类型
+    /// 不兼容的类型、多维动态数组&[&[]]
     pub(crate) fn contains_unsupported_fuzzable_type(
         &self,
         cache: &Cache,
         full_name_map: &FullNameMap,
     ) -> bool {
         for input_ty_ in &self.inputs {
-            if api_util::is_fuzzable_type(input_ty_, cache, full_name_map) {
+            if api_util::is_fuzzable_type(input_ty_, cache, full_name_map, None) {
                 let fuzzable_call_type =
-                    fuzz_type::fuzzable_call_type(input_ty_, cache, full_name_map);
+                    fuzz_type::fuzzable_call_type(input_ty_, cache, full_name_map, None);
                 let (fuzzable_type, call_type) =
                     fuzzable_call_type.generate_fuzzable_type_and_call_type();
 
@@ -184,8 +163,40 @@ impl ApiFunction {
                     }
                     _ => {}
                 }
+            } else {
+                return true;
             }
         }
         return false;
+    }
+
+    /// 打印函数(包含泛型函数)
+    pub(crate) fn _pretty_print(&self, cache: &Cache, full_name_map: &FullNameMap) -> String {
+        let generic_part = if self._generics.params.len() > 0 {
+            let mut line = "<".to_string();
+
+            for generic in &self._generics.params {
+                line.push_str(generic.name.to_string().as_str());
+            }
+            line.push_str(">");
+            line
+        } else {
+            "".to_string()
+        };
+        let mut fn_line = format!("fn {}{}(", self.full_name, generic_part);
+        let input_len = self.inputs.len();
+        for i in 0..input_len {
+            let input_type = &self.inputs[i];
+            if i != 0 {
+                fn_line.push_str(", ");
+            }
+            fn_line.push_str(api_util::_type_name(input_type, cache, full_name_map).as_str());
+        }
+        fn_line.push_str(")");
+        if let Some(ref ty_) = self.output {
+            fn_line.push_str("->");
+            fn_line.push_str(api_util::_type_name(ty_, cache, full_name_map).as_str());
+        }
+        fn_line
     }
 }

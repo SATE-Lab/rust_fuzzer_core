@@ -1,6 +1,13 @@
 use crate::clean::PrimitiveType;
 use crate::fuzz_targets_gen::fuzz_type::FuzzableType;
 use rustc_data_structures::fx::FxHashSet;
+
+/// 这是一个用来生成数据类型转换辅助函数代码的辅助函数
+/// 1. 通过_new_from_fuzzable()创建
+/// 2. 通过_get_all_dependent_afl_helpers获得自身以及自身依赖的数据类型
+/// 3. 通过_to_full_fuction得到辅助函数对应字符串
+/// 4. 通过_type_name获得对应类型字符串，用于生成测试文件
+/// 5. 通过_to_function_name获得对应转换辅助函数名字
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) enum _AflHelpers {
     _NoHelper,
@@ -267,6 +274,7 @@ impl _AflHelpers {
         }
     }
 
+    //为参数生成初始化语句
     pub(crate) fn _generate_param_initial_statement(
         &self,
         param_index: usize,
@@ -295,6 +303,7 @@ impl _AflHelpers {
         }
     }
 
+    //生成参数初始化rhs
     pub(crate) fn _generate_param_initial_rhs(
         &self,
         fixed_start_index: usize,
