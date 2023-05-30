@@ -48,6 +48,19 @@ pub(crate) struct ApiFunction {
 }
 
 impl ApiFunction {
+    /// 是否所有参数都是primitive
+    pub(crate) fn _is_start_function(&self, cache: &Cache, full_name_map: &FullNameMap) -> bool {
+        let input_types = &self.inputs;
+        let mut flag = true;
+        for ty in input_types {
+            if !api_util::_is_end_type(&ty, cache, full_name_map) {
+                flag = false;
+                break;
+            }
+        }
+        flag
+    }
+
     /// 是否是终结函数，即返回值是primitive type
     pub(crate) fn _is_end_function(&self, cache: &Cache, full_name_map: &FullNameMap) -> bool {
         if self.contains_mut_borrow() {
@@ -95,19 +108,6 @@ impl ApiFunction {
             false
         };
         !function_name_contains_prelude_type & !trait_contains_prelude_type
-    }
-
-    /// 是否所有参数都是primitive
-    pub(crate) fn _is_start_function(&self, cache: &Cache, full_name_map: &FullNameMap) -> bool {
-        let input_types = &self.inputs;
-        let mut flag = true;
-        for ty in input_types {
-            if !api_util::_is_end_type(&ty, cache, full_name_map) {
-                flag = false;
-                break;
-            }
-        }
-        flag
     }
 
     //FIXME:  判断一个函数是否是泛型函数
