@@ -60,7 +60,8 @@ lazy_static! {
         m.insert("byteorder", generate_fuzz_file_path("byteorder", "real_world_afl_work"));
         m.insert("bytes", generate_fuzz_file_path("bytes", "real_world_afl_work"));
         m.insert("csv", generate_fuzz_file_path("csv", "real_world_afl_work"));
-
+        m.insert("smallvec", generate_fuzz_file_path("smallvec", "real_world_afl_work"));
+        m.insert("indexmap", generate_fuzz_file_path("indexmap", "real_world_afl_work"));
         m
     };
 }
@@ -183,7 +184,8 @@ impl FileHelper {
         let chosen_sequences = api_graph.api_sequences.clone();
         let mut sequence_map = FxHashMap::default();
         for seq in chosen_sequences {
-            let seq_str = seq.print_function(api_graph, true);
+            let seq_str = seq.print_sequence(api_graph, true);
+            println!("{}", seq_str);
             sequence_map.insert(seq_str, seq);
         }
         for (seq_str, _seq) in &sequence_map {

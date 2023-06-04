@@ -227,28 +227,36 @@ pub(crate) fn substitute_type(
         clean::Type::Path { path } => {
             //对于path的每一段（实际上只有一段才会有泛型参数）
             for segments in &mut path.segments {
+                
                 //如果这一段的泛型参数是尖括号的形式的话
-                if let crate::clean::GenericArgs::AngleBracketed { args, .. } = &mut segments.args {
+                if let crate::clean::GenericArgs::AngleBracketed { args, bindings } = &mut segments.args {
                     //获取泛型参数列表，要求可变的
                     let args_ref = &mut (**args);
                     //遍历泛型参数列表
-                    for arg in args_ref.iter_mut() {
+                    for  (iindex, arg) in args_ref.iter_mut().enumerate() {
                         //发现参数列表里有泛型【类型】参数，其他比如生命周期不用管
                         if let GenericArg::Type(ty) = arg {
-                            //从中找到泛型的名字
-                            if let clean::Type::Generic(x) = ty {
-                                //在替换表中查询
-                                match substitutions.get(&x.to_string()) {
-                                    //查到了就去替换
-                                    Some(substi) => {
+                            //看看这个泛型参数有没有对应的binding
+                            if let Some(_binding) = bindings.get(iindex) {
+                                // 处理存在绑定约束的情况
+                                // 使用 binding 进行进一步操作
+                                // 有binding就不替换了？
+
+
+                            } else {
+                                // 处理没有绑定约束的情况
+                            
+                                match substitute_type(ty.clone(), substitutions){
+                                    Some(substi)=>{
                                         *arg = GenericArg::Type(substi.clone());
                                     }
-                                    //没查到就返回None
-                                    None => {
-                                        return None;
+                                    None=>{
+                                        //没有就不替换，因为可能有默认参数
+                                        //return None;
                                     }
                                 }
                             }
+
                         }
                     }
                 }
@@ -257,7 +265,14 @@ pub(crate) fn substitute_type(
         //对于T，替换成i32
         clean::Type::Generic(symbol) => {
             //如果这个类型本身就是泛型，可以直接替换，如果没有就是None
-            return substitutions.get(&symbol.to_string()).cloned();
+            copy_type = match substitutions.get(&symbol.to_string()){
+                 Some(ty)=>{
+                    ty.clone()
+                }None=>{
+                    clean::Primitive(PrimitiveType::I32)
+                    
+                }
+            }
         }
         //对于元组，(T, i32)替换成(i32,i32)
         clean::Type::Tuple(inners) => {
@@ -300,6 +315,7 @@ pub(crate) fn substitute_type(
         | clean::Type::ImplTrait(_)
         | clean::Type::DynTrait(_, _) => return None,
     }
+    //println!("替换成功，返回");
     //最后返回copy_
     Some(copy_type)
 }
@@ -378,7 +394,9 @@ pub(crate) fn _same_type_hard_mode(
         //泛型
         clean::Type::Generic(_generic) => {
             //因为在调用之前已经替换过了，所以不应该在这里出现
+            println!("!!!{}", _type_name(output_type, cache, full_name_map));
             panic!("这里不应该出现！");
+            
             //CallType::_NotCompatible
         }
         //基本类型
@@ -853,13 +871,15 @@ fn new_segments_without_lifetime(
         let segment_name = &old_path_segment.name;
         let generic_args = &old_path_segment.args;
         if let clean::GenericArgs::AngleBracketed { args, bindings } = generic_args {
-            let mut new_args = Vec::new();
+            let new_args = Vec::new();
             for arg in args.iter() {
                 match arg {
                     clean::GenericArg::Lifetime(..) => {} //Lifetime约束被忽略
                     clean::GenericArg::Const(..) | clean::GenericArg::Type(..) => {
                         //Const和Type被加入，因为我们之前就替换泛型了，所以不用考虑泛型
-                        new_args.push(arg.clone());
+                        //new_args.push(arg.clone());
+
+                        //FIXBUG:我们暂时都不考虑
                     }
                     clean::GenericArg::Infer => todo!(),
                 }

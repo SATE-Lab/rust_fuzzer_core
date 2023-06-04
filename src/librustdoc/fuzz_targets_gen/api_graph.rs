@@ -17,6 +17,7 @@ use rand::Rng;
 use rustc_middle::ty::Visibility;
 
 use super::api_sequence::ReverseApiSequence;
+use super::api_util::substitute_type;
 use super::fuzz_type;
 //use super::generic_function::GenericFunction;
 
@@ -267,6 +268,17 @@ impl<'a> ApiGraph<'a> {
                     // 对于second_fun的每个参数，看看first_fun的返回值是否对应得上
                     for (k, input_type) in second_fun.inputs.iter().enumerate() {
                         //为了添加泛型支持，在这里先替换
+                        println!(
+                            "替换前output: {}",
+                            api_util::_type_name(&output_type, self.cache, &self.full_name_map)
+                                .as_str()
+                        );
+                        println!(
+                            "替换前input: {}",
+                            api_util::_type_name(&input_type, self.cache, &self.full_name_map)
+                                .as_str()
+                        );
+
                         let output_type = match api_util::substitute_type(
                             output_type.clone(),
                             &first_fun.generic_substitutions,
@@ -287,12 +299,12 @@ impl<'a> ApiGraph<'a> {
                         };
 
                         println!(
-                            "output: {}",
+                            "替换后output: {}",
                             api_util::_type_name(&output_type, self.cache, &self.full_name_map)
                                 .as_str()
                         );
                         println!(
-                            "input: {}",
+                            "替换后input: {}",
                             api_util::_type_name(&input_type, self.cache, &self.full_name_map)
                                 .as_str()
                         );
@@ -686,7 +698,7 @@ impl<'a> ApiGraph<'a> {
             sequences.push(functions.clone());
 
             //打印出名字
-            println!("Functions: {:?}", functions);
+            println!("被解析出来的合理的序列: {:?}", functions);
         }
 
         // check一下有没有corpus都在里面
@@ -698,7 +710,7 @@ impl<'a> ApiGraph<'a> {
                 .find(|x| x.full_name.to_owned() == apis.to_owned())
                 .is_none()
             {
-                panic!("有corpus的API，在我们这没找到{}。", apis);
+                panic!("有corpus的API, 在我们这没找到{}。", apis);
             }
         }
 
@@ -1128,7 +1140,10 @@ impl<'a> ApiGraph<'a> {
         let mut to_cover_nodes = Vec::new();
 
         let mut fixed_covered_nodes = FxHashSet::default();
-        for fixed_sequence in &self.api_sequences {
+
+        let mut api_sequences = self.api_sequences.clone();
+        api_sequences.reverse();
+        for fixed_sequence in &api_sequences {
             //let covered_nodes = fixed_sequence._get_contained_api_functions();
             //for covered_node in &covered_nodes {
             //    fixed_covered_nodes.insert(*covered_node);
@@ -1402,6 +1417,15 @@ impl<'a> ApiGraph<'a> {
                 for (i, current_ty) in input_params.iter().enumerate() {
                     // 如果参数是fuzzable的话，...
                     // 在这里T会被替换成concrete type
+                    let current_ty = &match substitute_type(
+                        current_ty.clone(),
+                        &input_function.generic_substitutions,
+                    ) {
+                        //FIXME:
+                        Some(substi) => substi,
+                        None => current_ty.clone(),
+                    };
+
                     if api_util::is_fuzzable_type(
                         current_ty,
                         self.cache,

@@ -258,20 +258,13 @@ impl ApiSequence {
         }
     }
 
-    pub(crate) fn print_function(&self, graph: &ApiGraph<'_>, print: bool) -> String {
-        if print {
-            println!("##################################print sequence");
-        }
-        let mut res = String::from("");
+    pub(crate) fn print_sequence(&self, graph: &ApiGraph<'_>, _print: bool) -> String {
+        let mut res = String::from("打印sequence: ");
 
         for func in &self.functions {
             let index = func.func.1;
             let name = &graph.api_functions[index]._pretty_print(graph.cache, &graph.full_name_map);
             res.push_str(format!("[{}] ", name).as_str());
-        }
-        if print {
-            println!("{}", res);
-            println!("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$end print sequence");
         }
         res
     }
@@ -387,7 +380,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_moved(&self, index: usize) -> bool {
-        if self._moved.contains(&index) { true } else { false }
+        if self._moved.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn _insert_move_index(&mut self, index: usize) {
@@ -403,7 +400,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_fuzzable_need_mut_tag(&self, index: usize) -> bool {
-        if self._fuzzable_mut_tag.contains(&index) { true } else { false }
+        if self._fuzzable_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn _insert_function_mut_tag(&mut self, index: usize) {
@@ -411,7 +412,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_function_need_mut_tag(&self, index: usize) -> bool {
-        if self._function_mut_tag.contains(&index) { true } else { false }
+        if self._function_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn set_unsafe(&mut self) {

@@ -117,7 +117,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 krate.name(tcx)
             );
 
-            if krate.name(tcx).to_string() != "url" {
+            if krate.name(tcx).to_string() != "indexmap" {
                 println!("不是这个crate");
                 return Ok((cx, krate));
             }
@@ -144,23 +144,20 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
 
             use crate::fuzz_targets_gen::api_graph::GraphTraverseAlgorithm::*;
 
+            /*
             let generation_strategy = _UseRealWorld;
-            /*if random_strategy == _Default {
-                api_graph.generate_all_possoble_sequences(_BfsEndPoint);
-            }else{
-                api_graph.default_generate_sequences();
-            }*/
             api_graph.generate_all_possoble_sequences(
                 generation_strategy,
                 krate.name(tcx).as_str().replace("_", "-").as_str(),
             );
+            */
 
             let generation_strategy = _Bfs;
-
             api_graph.generate_all_possoble_sequences(
                 generation_strategy,
                 krate.name(tcx).as_str().replace("_", "-").as_str(),
             );
+
             println!("total functions in crate : {:?}", api_graph.api_functions.len());
 
             if file_util::can_write_to_file(
