@@ -182,22 +182,14 @@ pub(crate) fn _analyse_impl(
             //println!("{:?}", trait_);
             let trait_ty_def_id = &trait_.def_id();
             let trait_full_name = full_name_map._get_full_name(*trait_ty_def_id);
-            if let Some(trait_name) = trait_full_name {
-                Some(trait_name.clone())
-            } else {
-                None
-            }
+            if let Some(trait_name) = trait_full_name { Some(trait_name.clone()) } else { None }
         }
     };
 
     let impl_ty_def_id = &impl_.for_.def_id(cache);
     let type_full_name = if let Some(def_id) = impl_ty_def_id {
         let type_name = full_name_map._get_full_name(*def_id);
-        if let Some(real_type_name) = type_name {
-            Some(real_type_name.clone())
-        } else {
-            None
-        }
+        if let Some(real_type_name) = type_name { Some(real_type_name.clone()) } else { None }
     } else {
         None
     };
