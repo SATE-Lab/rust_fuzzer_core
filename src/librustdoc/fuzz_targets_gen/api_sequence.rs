@@ -7,25 +7,29 @@ use crate::fuzz_targets_gen::prelude_type;
 use crate::fuzz_targets_gen::replay_util;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 
+/// ApiCall里面的参数类型，可能是
+/// 1. 其他API的返回值
+/// 2. fuzzable类型
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub(crate) enum ParamType {
     _FunctionReturn,
     _FuzzableType,
 }
+/// ApiSequence中的每个API对应一个ApiCall
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub(crate) struct ApiCall {
-    //要调用的函数类型，以及在对应数组中的位置
+    //要调用的函数类型，以及在对应数组中的位置（第一个参数可以忽略，因为都是barefunction）
     pub(crate) func: (ApiType, usize),
     //参数类型(表示是使用之前的返回值，还是使用fuzzable的变量)，在当前的调用序列中参数所在的位置，以及如何调用
     pub(crate) params: Vec<(ParamType, usize, CallType)>,
 }
 
 impl ApiCall {
-    pub(crate) fn _new_without_params(api_type: &ApiType, index: usize) -> Self {
+    /*pub(crate) fn new_without_params(api_type: &ApiType, index: usize) -> Self {
         let func = (api_type.clone(), index);
         let params = Vec::new();
         ApiCall { func, params }
-    }
+    }*/
 
     pub(crate) fn _new(fun_index: usize) -> Self {
         let api_type = ApiType::BareFunction;
@@ -261,11 +265,9 @@ impl ApiSequence {
         let mut res = String::from("");
 
         for func in &self.functions {
-            //FIXME:
             let index = func.func.1;
-            let name = &graph.api_functions[index].full_name;
-            res.push_str(name);
-            res.push_str(" ");
+            let name = &graph.api_functions[index]._pretty_print(graph.cache, &graph.full_name_map);
+            res.push_str(format!("[{}] ", name).as_str());
         }
         if print {
             println!("{}", res);
@@ -273,12 +275,12 @@ impl ApiSequence {
         }
         res
     }
-
-    pub(crate) fn _add_fn_without_params(&mut self, api_type: &ApiType, index: usize) {
-        let api_call = ApiCall::_new_without_params(api_type, index);
-        self.functions.push(api_call);
-    }
-
+    /*
+        pub(crate) fn add_fn_without_params(&mut self, api_type: &ApiType, index: usize) {
+            let api_call = ApiCall::_new_without_params(api_type, index);
+            self.functions.push(api_call);
+        }
+    */
     pub(crate) fn _add_dependency(&mut self, dependency: usize) {
         self._covered_dependencies.insert(dependency);
     }
@@ -303,6 +305,7 @@ impl ApiSequence {
             let (api_type, index) = &last_api_call.func;
             match api_type {
                 ApiType::BareFunction => Some(*index),
+                ApiType::GenericFunction => todo!(),
             }
         }
     }
@@ -384,7 +387,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_moved(&self, index: usize) -> bool {
-        if self._moved.contains(&index) { true } else { false }
+        if self._moved.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn _insert_move_index(&mut self, index: usize) {
@@ -400,7 +407,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_fuzzable_need_mut_tag(&self, index: usize) -> bool {
-        if self._fuzzable_mut_tag.contains(&index) { true } else { false }
+        if self._fuzzable_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn _insert_function_mut_tag(&mut self, index: usize) {
@@ -408,7 +419,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_function_need_mut_tag(&self, index: usize) -> bool {
-        if self._function_mut_tag.contains(&index) { true } else { false }
+        if self._function_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn set_unsafe(&mut self) {
@@ -494,6 +509,7 @@ impl ApiSequence {
             }
             let api_function_index = match api_call.func.0 {
                 ApiType::BareFunction => api_call.func.1,
+                ApiType::GenericFunction => todo!(),
             };
             let api_function = &_api_graph.api_functions[api_function_index];
             for param_index in 0..param_len {
@@ -980,6 +996,7 @@ impl ApiSequence {
                         &_api_graph.api_functions[*function_index].full_name;
                     res.push_str(api_function_full_name.as_str());
                 }
+                ApiType::GenericFunction => todo!(),
             }
             res.push('(');
 

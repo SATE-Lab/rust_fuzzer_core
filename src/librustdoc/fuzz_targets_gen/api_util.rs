@@ -1,12 +1,23 @@
-use crate::clean::{self, PrimitiveType};
+//! 摘要，这部分是跟API有关的辅助模块
+//! [`_extract_input_types`] 解析函数参数类型列表
+//! [`_extract_output_type`] 解析函数返回值类型
+//! [`_is_generic_type`] 判断是否是泛型
+//! [`_is_end_type`] 判断是否是基本类型
+//! [`_type_name`] 类型名字
+//! [`substitute_type`] 替换泛型参数，在调用same_type之前就把泛型进行替换
+//! [`_same_type`]：这个是判断output_type能否通过某些CallType（比如Option、unwrap、&、*这种）转换成input_type
+
+use crate::clean::{self, GenericArg, GenericArgs, PrimitiveType};
 use crate::formats::cache::Cache;
 use crate::fuzz_targets_gen::call_type::CallType;
 use crate::fuzz_targets_gen::fuzz_type::{self, FuzzableCallType};
 use crate::fuzz_targets_gen::impl_util::FullNameMap;
 use crate::fuzz_targets_gen::prelude_type::{self, PreludeType};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{self, Mutability};
 use thin_vec::ThinVec;
 
+/// ok
 /// 解析参数类型
 pub(crate) fn _extract_input_types(inputs: &clean::Arguments) -> Vec<clean::Type> {
     let mut input_types = Vec::new();
@@ -16,14 +27,15 @@ pub(crate) fn _extract_input_types(inputs: &clean::Arguments) -> Vec<clean::Type
     }
     input_types
 }
-/// 解析返回值类型
+/// ok
+/// 解析返回值类型，如果有就Some，没有就None
 pub(crate) fn _extract_output_type(output: &clean::FnRetTy) -> Option<clean::Type> {
     match output {
         clean::FnRetTy::Return(ty) => Some(ty.clone()),
         clean::FnRetTy::DefaultReturn => None,
     }
 }
-
+/// ok
 /// 判断一个Type是否是泛型
 pub(crate) fn _is_generic_type(ty: &clean::Type) -> bool {
     //FIXME: self不需要考虑，因为在产生api function的时候就已经完成转换，但需要考虑类型嵌套的情况
@@ -84,6 +96,8 @@ pub(crate) fn _is_generic_type(ty: &clean::Type) -> bool {
     }
 }
 
+/// ok
+/// 是否是终结类型
 pub(crate) fn _is_end_type(ty: &clean::Type, cache: &Cache, full_name_map: &FullNameMap) -> bool {
     match ty {
         clean::Type::Path { .. } => {
@@ -124,19 +138,10 @@ pub(crate) fn _is_end_type(ty: &clean::Type, cache: &Cache, full_name_map: &Full
             let inner_type = &**type_;
             return _is_end_type(inner_type, cache, full_name_map);
         }
-        clean::Type::QPath { .. } => {
-            //FIXME:  qpathx
-            false
-        }
-        clean::Type::Infer => false,
-        clean::Type::ImplTrait(_) => {
-            //FIXME:  impl trait
-            false
-        }
-        clean::Type::DynTrait(_, _) => {
-            //FIXME:
-            false
-        }
+        clean::Type::QPath(_)
+        | clean::Type::Infer
+        | clean::Type::ImplTrait(_)
+        | clean::Type::DynTrait(_, _) => false,
     }
 }
 
@@ -146,12 +151,45 @@ pub(crate) fn _type_name(
     cache: &Cache,
     full_name_map: &FullNameMap,
 ) -> String {
+    /*
     if let Some(def_id) = &type_.def_id(cache) {
         if let Some(full_name) = full_name_map._get_full_name(*def_id) {
             return full_name.clone();
         }
-    }
+    }*/
     match type_ {
+        clean::Type::Path { path } => {
+            let mut res = "".to_string();
+            for (idx, path_seg) in path.segments.iter().enumerate() {
+                res += path_seg.name.as_str();
+
+                if let GenericArgs::AngleBracketed { args, .. } = &path_seg.args {
+                    if args.len() > 0 {
+                        res += "<";
+                        for (index2, arg) in args.iter().enumerate() {
+                            match &arg {
+                                clean::GenericArg::Type(typ) => {
+                                    res += &_type_name(typ, cache, full_name_map);
+                                }
+                                GenericArg::Lifetime(life) => {
+                                    res += life.0.as_str();
+                                }
+                                GenericArg::Const(_) => todo!(),
+                                GenericArg::Infer => res += "_",
+                            }
+                            if index2 != args.len() - 1 {
+                                res += ", ";
+                            }
+                        }
+                        res += ">";
+                    }
+                }
+                if idx != path.segments.len() - 1 {
+                    res += "::";
+                }
+            }
+            res
+        }
         clean::Type::Primitive(primitive_type) => primitive_type.as_sym().to_string(),
         clean::Type::Generic(generic) => generic.to_string(),
         clean::Type::BorrowedRef { type_, .. } => {
@@ -176,6 +214,98 @@ pub(crate) fn _type_name(
     }
 }
 
+/// 重要，把泛型类型中的泛型参数都替换
+/// 如果替换不成功返回None
+#[allow(dead_code)]
+pub(crate) fn substitute_type(
+    generic_type: clean::Type,
+    substitutions: &FxHashMap<String, clean::Type>,
+) -> Option<clean::Type> {
+    let mut copy_type = generic_type.clone();
+    match &mut copy_type {
+        //对于 std::core::Vec<T>，替换成std::core::Vec<i32>
+        clean::Type::Path { path } => {
+            //对于path的每一段（实际上只有一段才会有泛型参数）
+            for segments in &mut path.segments {
+                //如果这一段的泛型参数是尖括号的形式的话
+                if let crate::clean::GenericArgs::AngleBracketed { args, .. } = &mut segments.args {
+                    //获取泛型参数列表，要求可变的
+                    let args_ref = &mut (**args);
+                    //遍历泛型参数列表
+                    for arg in args_ref.iter_mut() {
+                        //发现参数列表里有泛型【类型】参数，其他比如生命周期不用管
+                        if let GenericArg::Type(ty) = arg {
+                            //从中找到泛型的名字
+                            if let clean::Type::Generic(x) = ty {
+                                //在替换表中查询
+                                match substitutions.get(&x.to_string()) {
+                                    //查到了就去替换
+                                    Some(substi) => {
+                                        *arg = GenericArg::Type(substi.clone());
+                                    }
+                                    //没查到就返回None
+                                    None => {
+                                        return None;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        //对于T，替换成i32
+        clean::Type::Generic(symbol) => {
+            //如果这个类型本身就是泛型，可以直接替换，如果没有就是None
+            return substitutions.get(&symbol.to_string()).cloned();
+        }
+        //对于元组，(T, i32)替换成(i32,i32)
+        clean::Type::Tuple(inners) => {
+            for inner_type in inners {
+                *inner_type = match substitute_type(inner_type.clone(), substitutions) {
+                    Some(substi) => substi.clone(),
+                    None => {
+                        //没查到就返回None
+                        return None;
+                    }
+                }
+            }
+        }
+        //对于slice、数组、原始指针
+        clean::Type::Slice(inner)
+        | clean::Type::Array(inner, ..)
+        | clean::Type::RawPointer(_, inner) => {
+            *inner = match substitute_type(*inner.clone(), substitutions) {
+                Some(substi) => Box::new(substi),
+                None => {
+                    return None;
+                }
+            }
+        }
+        clean::Type::BorrowedRef { type_, .. } => {
+            *type_ = match substitute_type(*type_.clone(), substitutions) {
+                Some(substi) => Box::new(substi),
+                None => {
+                    return None;
+                }
+            }
+        }
+
+        //实体类型
+        clean::Type::Primitive(_)
+        //下面的不支持
+        | clean::Type::BareFunction(_)
+        | clean::Type::QPath(_)
+        | clean::Type::Infer
+        | clean::Type::ImplTrait(_)
+        | clean::Type::DynTrait(_, _) => return None,
+    }
+    //最后返回copy_
+    Some(copy_type)
+}
+
+/// 判断两个类型是否可以通过某种type来转换
+/// output_type转换成input_type
 pub(crate) fn _same_type(
     output_type: &clean::Type,
     input_type: &clean::Type,
@@ -202,10 +332,13 @@ pub(crate) fn _same_type_hard_mode(
     if output_type == input_type {
         return CallType::_DirectCall;
     }
-    //对输入类型解引用,后面就不在考虑输入类型需要解引用的情况
+
+    // 输入类型如果是
+    // 1. 引用
+    // 2. 原生指针
+    // 对输入类型把引用搞没,后面就不在考虑输入类型需要解引用的情况
     match input_type {
         clean::Type::BorrowedRef { mutability, type_, .. } => {
-            //FIXME: should take lifetime into account?
             return _borrowed_ref_in_same_type(
                 mutability,
                 type_,
@@ -239,20 +372,18 @@ pub(crate) fn _same_type_hard_mode(
     match output_type {
         //结构体、枚举、联合
         clean::Type::Path { .. } => {
+            //FIXME:
             _same_type_resolved_path(output_type, input_type, cache, full_name_map)
         }
-        //范型
+        //泛型
         clean::Type::Generic(_generic) => {
-            //FIXME: 范型处理，暂不考虑
-            CallType::_NotCompatible
+            //因为在调用之前已经替换过了，所以不应该在这里出现
+            panic!("这里不应该出现！");
+            //CallType::_NotCompatible
         }
         //基本类型
         //FIXME: 暂不考虑两次转换，如char和任意宽度的数字，但考虑char和u8的转换
         clean::Type::Primitive(primitive_type) => _same_type_primitive(primitive_type, input_type),
-        clean::Type::BareFunction(_bare_function) => {
-            //FIXME: 有需要的时候在考虑
-            CallType::_NotCompatible
-        }
         clean::Type::Tuple(_inner_types) => CallType::_NotCompatible,
         clean::Type::Slice(_inner_type) => CallType::_NotCompatible,
         clean::Type::Array(_inner_type, _) => CallType::_NotCompatible,
@@ -263,20 +394,16 @@ pub(crate) fn _same_type_hard_mode(
         clean::Type::BorrowedRef { type_, .. } => {
             _same_type_borrowed_ref(type_, input_type, cache, full_name_map)
         }
-        clean::Type::QPath { .. } => {
-            //FIXME: 有需要的时候再考虑
-            CallType::_NotCompatible
-        }
-        clean::Type::ImplTrait(_) => {
-            //FIXME: 有需要的时候在考虑
-            CallType::_NotCompatible
-        }
-        clean::Type::DynTrait(_, _) => todo!(),
+        clean::Type::BareFunction(_)
+        | clean::Type::QPath(_)
+        | clean::Type::ImplTrait(_)
+        | clean::Type::DynTrait(_, _) => CallType::_NotCompatible,
     }
 }
 
-//test if types are the same type
-//输出类型是ResolvedPath的情况
+/// ok
+/// test if types are the same type
+/// 输出类型是ResolvedPath的情况
 fn _same_type_resolved_path(
     output_type: &clean::Type,
     input_type: &clean::Type,
@@ -315,7 +442,8 @@ fn _same_type_resolved_path(
     }
 }
 
-//输出类型是Primitive的情况
+/// ok
+/// 输出类型是Primitive的情况
 fn _same_type_primitive(primitive_type: &PrimitiveType, input_type: &clean::Type) -> CallType {
     match primitive_type {
         PrimitiveType::Isize
@@ -409,7 +537,8 @@ fn _same_type_primitive(primitive_type: &PrimitiveType, input_type: &clean::Type
     }
 }
 
-//输出类型是RawPointer的情况
+/// ok
+/// 输出类型是RawPointer的情况
 fn _same_type_raw_pointer(
     type_: &Box<clean::Type>,
     input_type: &clean::Type,
@@ -428,7 +557,8 @@ fn _same_type_raw_pointer(
     }
 }
 
-//输出类型是BorrowedRef的情况
+/// ok
+/// 输出类型是BorrowedRef的情况
 fn _same_type_borrowed_ref(
     type_: &Box<clean::Type>,
     input_type: &clean::Type,
@@ -453,8 +583,9 @@ fn _same_type_borrowed_ref(
     }
 }
 
-//作为下个函数的输入类型：second type
-//处理输入类型是引用的情况
+/// ok
+/// 作为下个函数的输入类型：second type
+/// 处理输入类型是引用的情况
 pub(crate) fn _borrowed_ref_in_same_type(
     mutability: &Mutability,
     type_: &Box<clean::Type>,
@@ -479,7 +610,8 @@ pub(crate) fn _borrowed_ref_in_same_type(
     }
 }
 
-//处理输入类型是裸指针的情况
+/// ok
+/// 处理输入类型是裸指针的情况
 pub(crate) fn _raw_pointer_in_same_type(
     mutability: &Mutability,
     type_: &Box<clean::Type>,
@@ -510,7 +642,7 @@ pub(crate) fn _raw_pointer_in_same_type(
     }
 }
 
-//判断一个类型是否是按照copy语义来进行穿参的
+//判断一个类型是否是按照copy语义来进行传参的
 pub(crate) fn _copy_type(type_: &clean::Type) -> bool {
     match type_ {
         clean::Type::Path { .. } => {
@@ -518,7 +650,7 @@ pub(crate) fn _copy_type(type_: &clean::Type) -> bool {
             return false;
         }
         clean::Type::Generic(_) => {
-            //FIXME: 范型可能是可以copy的，要看有没有copy trait的约束
+            //在这里不需要考虑泛型
             return false;
         }
         clean::Type::Primitive(primitive_type) => match primitive_type {
@@ -611,11 +743,13 @@ pub(crate) fn _move_condition(input_type: &clean::Type, call_type: &CallType) ->
     return false;
 }
 
+/// ok
+/// 是否是可fuzz的类型
 pub(crate) fn is_fuzzable_type(
     ty_: &clean::Type,
     cache: &Cache,
     full_name_map: &FullNameMap,
-    substitution: Option<&clean::Type>,
+    substitution: Option<&FxHashMap<String, clean::Type>>,
 ) -> bool {
     let fuzzable = fuzz_type::fuzzable_call_type(ty_, cache, full_name_map, substitution);
     match fuzzable {
@@ -674,6 +808,8 @@ pub(crate) fn _need_mut_tag(call_type: &CallType) -> bool {
     }
 }
 
+/// ok
+/// 判断path是否一致，其中需要调用new_segments_without_lifetime来去除生命周期，之后方便比较
 pub(crate) fn _resolved_path_equal_without_lifetime(
     ltype: &clean::Type,
     rtype: &clean::Type,
@@ -707,6 +843,8 @@ pub(crate) fn _resolved_path_equal_without_lifetime(
     return false;
 }
 
+/// ok
+/// 获取没有生命周期信息的Path，这样就可以比较是否是同一个类型的结构体了
 fn new_segments_without_lifetime(
     old_path_segments: &ThinVec<clean::PathSegment>,
 ) -> Vec<clean::PathSegment> {
@@ -718,8 +856,9 @@ fn new_segments_without_lifetime(
             let mut new_args = Vec::new();
             for arg in args.iter() {
                 match arg {
-                    clean::GenericArg::Lifetime(..) => {}
+                    clean::GenericArg::Lifetime(..) => {} //Lifetime约束被忽略
                     clean::GenericArg::Const(..) | clean::GenericArg::Type(..) => {
+                        //Const和Type被加入，因为我们之前就替换泛型了，所以不用考虑泛型
                         new_args.push(arg.clone());
                     }
                     clean::GenericArg::Infer => todo!(),

@@ -1,10 +1,10 @@
 use crate::clean::{self, PrimitiveType};
 use crate::formats::cache::Cache;
-use rustc_hir::Mutability;
-
 use crate::fuzz_targets_gen::call_type::CallType;
 use crate::fuzz_targets_gen::impl_util::FullNameMap;
 use crate::fuzz_targets_gen::prelude_type::PreludeType;
+use rustc_data_structures::fx::FxHashMap;
+use rustc_hir::Mutability;
 
 //如果构造一个fuzzable的变量
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -301,7 +301,7 @@ pub(crate) fn fuzzable_call_type(
     ty_: &clean::Type,
     cache: &Cache,
     full_name_map: &FullNameMap,
-    substitution: Option<&clean::Type>, //替换泛型的类型
+    substitution: Option<&FxHashMap<String, clean::Type>>, //替换泛型的类型
 ) -> FuzzableCallType {
     match ty_ {
         clean::Type::Path { .. } => {
@@ -326,14 +326,19 @@ pub(crate) fn fuzzable_call_type(
             }
         }
         clean::Type::Generic(s) => {
-            println!("generic type = {:?}", s);
+            //println!("generic type = {:?}", s);
             //FIXME:
 
             match substitution {
-                Some(typ) => {
+                Some(substi) => {
                     //目前泛型替换类型只支持基本类型
+                    let typ = match substi.get(&s.to_string()) {
+                        Some(ty) => ty.to_owned(),
+                        None => return FuzzableCallType::NoFuzzable,
+                    };
                     assert!(if let clean::Type::Primitive(_) = typ { true } else { false });
-                    return fuzzable_call_type(typ, cache, full_name_map, None);
+                    return fuzzable_call_type(&typ, cache, full_name_map, substitution);
+                    //这里是None也行
                 }
                 None => FuzzableCallType::NoFuzzable,
             }

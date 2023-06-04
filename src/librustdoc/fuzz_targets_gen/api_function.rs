@@ -1,9 +1,21 @@
+//! 摘要，这部分是跟API依赖图中ApiFunction有关的API
+//! 1. ApiUnsafety：跟安全性有关，不说了
+//! 2. ApiFunction：
+//!     [`_is_start_function`] 是否是开始函数
+//!     [`_is_end_function`] 是否是终结函数
+//!     [`contains_mut_borrow`] 是否参数包含可变借用
+//!     [`is_not_defined_on_prelude_type`] 是否有Option Result
+//!     [`_is_generic_function`] 是否是泛型函数
+//!     [`_has_no_output`] 是否没有输出
+//!     [`contains_unsupported_fuzzable_type`] 是否包含未支持的fuzzable类型，比如多维可变长度参数
+//!     [`_pretty_print`]：打印
+
 use crate::formats::cache::Cache;
 use crate::fuzz_targets_gen::api_util;
 use crate::fuzz_targets_gen::call_type::CallType;
 use crate::fuzz_targets_gen::fuzz_type::{self, FuzzableType};
 use crate::fuzz_targets_gen::impl_util::FullNameMap;
-use rustc_data_structures::fx::FxHashSet;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::{self, Mutability};
 use rustc_middle::ty::Visibility;
 
@@ -38,17 +50,18 @@ impl ApiUnsafety {
 /// 用来标识API图中的API
 #[derive(Clone, Debug)]
 pub(crate) struct ApiFunction {
-    pub(crate) full_name: String,                //函数名，要来比较是否相等
-    pub(crate) _generics: clean::Generics,       // 泛型
-    pub(crate) inputs: Vec<clean::Type>,         //输入的参数
-    pub(crate) output: Option<clean::Type>,      //返回值
+    pub(crate) full_name: String,          //函数名，要来比较是否相等
+    pub(crate) _generics: clean::Generics, // 泛型
+    pub(crate) generic_substitutions: FxHashMap<String, clean::Type>, //用来替换泛型
+    pub(crate) inputs: Vec<clean::Type>,   //输入的参数
+    pub(crate) output: Option<clean::Type>, //返回值
     pub(crate) _trait_full_path: Option<String>, //Trait的全限定路径,因为使用trait::fun来调用函数的时候，需要将trait的全路径引入
     pub(crate) _unsafe_tag: ApiUnsafety,         //是否unsafe
     pub(crate) visibility: Visibility,           //可见性
 }
 
 impl ApiFunction {
-    /// 是否所有参数都是primitive
+    /// 所有参数都是primitive才能是start_function，其中泛型参数虽然我们不打算支持结构体，但是仍然保留生成依赖的可能。
     pub(crate) fn _is_start_function(&self, cache: &Cache, full_name_map: &FullNameMap) -> bool {
         let input_types = &self.inputs;
         let mut flag = true;
@@ -61,7 +74,7 @@ impl ApiFunction {
         flag
     }
 
-    /// 是否是终结函数，即返回值是primitive type
+    /// 返回值不存在或者是primitive类型的函数是终结函数，即返回值是primitive type
     pub(crate) fn _is_end_function(&self, cache: &Cache, full_name_map: &FullNameMap) -> bool {
         if self.contains_mut_borrow() {
             return false;
@@ -77,7 +90,7 @@ impl ApiFunction {
             }
             None => true,
         }
-        //FIXME: 考虑可变引用或者是可变裸指针做参数的情况
+        //不考虑可变引用或者是可变裸指针做参数的情况
     }
 
     /// 判断函数，参数是否包含可变借用
@@ -133,19 +146,28 @@ impl ApiFunction {
     }
 
     /// 是否包含了未支持的类型
-    /// 不兼容的类型、多维动态数组&[&[]]
+    /// 不兼容的调用类型、多维动态数组&[&[]]
     pub(crate) fn contains_unsupported_fuzzable_type(
         &self,
         cache: &Cache,
         full_name_map: &FullNameMap,
     ) -> bool {
         for input_ty_ in &self.inputs {
+            // 意思是
+            // 如果有fuzzable_type，就进去判断一下，包含多为动态数组或者不兼容的调用类型的，就不行
+            // 否则，就可能是结构体，这种应该pass
             if api_util::is_fuzzable_type(input_ty_, cache, full_name_map, None) {
+                // !!!!!!!!!!
+                // 从fuzzable_call_type来生成fuzzable_type和call_type
+
+                //这一行返回的是用substitution替换后的FuzzableCallType
                 let fuzzable_call_type =
                     fuzz_type::fuzzable_call_type(input_ty_, cache, full_name_map, None);
+                //这一行是使用替换后的FuzzableCallType来生成Fuzzable_type和CallType
                 let (fuzzable_type, call_type) =
                     fuzzable_call_type.generate_fuzzable_type_and_call_type();
 
+                //这行没用
                 match &fuzzable_type {
                     FuzzableType::NoFuzzable => {
                         return true;
@@ -163,8 +185,7 @@ impl ApiFunction {
                     }
                     _ => {}
                 }
-            } else {
-                return true;
+                //警惕！！！差点改错了
             }
         }
         return false;
@@ -173,12 +194,15 @@ impl ApiFunction {
     /// 打印函数(包含泛型函数)
     pub(crate) fn _pretty_print(&self, cache: &Cache, full_name_map: &FullNameMap) -> String {
         let generic_part = if self._generics.params.len() > 0 {
-            let mut line = "<".to_string();
+            let mut line = "\x1B[31m<".to_string();
 
-            for generic in &self._generics.params {
+            for (idx, generic) in self._generics.params.iter().enumerate() {
                 line.push_str(generic.name.to_string().as_str());
+                if idx != &self._generics.params.len() - 1 {
+                    line.push_str(", ");
+                }
             }
-            line.push_str(">");
+            line.push_str(">\x1B[0m");
             line
         } else {
             "".to_string()

@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use rustc_data_structures::fx::FxHashMap;
 //use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 //use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
@@ -115,11 +116,11 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 "\nStart to parse tested crate and generate test file.\nThe name of the tested crate is {}.",
                 krate.name(tcx)
             );
-            /*
-            if krate.name(tcx).to_string() != "csv" {
-                println!("不对");
+
+            if krate.name(tcx).to_string() != "url" {
+                println!("不是这个crate");
                 return Ok((cx, krate));
-            }*/
+            }
 
             // 新建一个API依赖图
             let mut api_graph = ApiGraph::new(&krate.name(tcx).to_string(), cx.cache());
@@ -154,14 +155,20 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 krate.name(tcx).as_str().replace("_", "-").as_str(),
             );
 
-            //print_message::_print_generic_functions(&api_dependency_graph);
-            //println!("total functions in crate : {:?}", api_graph.api_functions.len());
+            let generation_strategy = _Bfs;
+
+            api_graph.generate_all_possoble_sequences(
+                generation_strategy,
+                krate.name(tcx).as_str().replace("_", "-").as_str(),
+            );
+            println!("total functions in crate : {:?}", api_graph.api_functions.len());
 
             if file_util::can_write_to_file(
                 &api_graph._crate_name.replace("_", "-"),
                 //&"unicode-segmentation".to_owned(),
                 generation_strategy,
             ) {
+                println!("I will write test case into files");
                 //whether to use random strategy
                 let file_helper = file_util::FileHelper::new(&api_graph, generation_strategy);
                 //println!("file_helper:{:?}", file_helper);
@@ -318,6 +325,7 @@ impl Context<'_> {
                         let api_fun = api_function::ApiFunction {
                             full_name,
                             _generics,
+                            generic_substitutions: FxHashMap::default(), //！！！！！！！初始化
                             inputs,
                             output,
                             _trait_full_path: None,

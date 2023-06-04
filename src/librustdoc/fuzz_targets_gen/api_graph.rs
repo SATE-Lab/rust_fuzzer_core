@@ -1,3 +1,4 @@
+use crate::clean::{self, types};
 use crate::formats::cache::Cache;
 use crate::fuzz_targets_gen::api_function::ApiFunction;
 use crate::fuzz_targets_gen::api_sequence::{ApiCall, ApiSequence, ParamType};
@@ -17,7 +18,7 @@ use rustc_middle::ty::Visibility;
 
 use super::api_sequence::ReverseApiSequence;
 use super::fuzz_type;
-use super::generic_function::GenericFunction;
+//use super::generic_function::GenericFunction;
 
 lazy_static! {
     static ref RANDOM_WALK_STEPS: FxHashMap<&'static str, usize> = {
@@ -63,7 +64,7 @@ pub(crate) struct ApiGraph<'a> {
     pub(crate) mod_visibility: ModVisibity,
 
     ///暂时不支持的
-    pub(crate) generic_functions: Vec<GenericFunction>,
+    //pub(crate) generic_functions: Vec<GenericFunction>,
     pub(crate) functions_with_unsupported_fuzzable_types: FxHashSet<String>,
     pub(crate) cache: &'a Cache,
     //pub(crate) _sequences_of_all_algorithm : FxFxHashMap<GraphTraverseAlgorithm, Vec<ApiSequence>>
@@ -92,10 +93,11 @@ pub(crate) enum GraphTraverseAlgorithm {
     _UseRealWorld, //当前的方法，使用解析出来的sequence
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Copy)]
 pub(crate) enum ApiType {
     BareFunction,
-    //GenericFunction, currently not support now
+    GenericFunction, //currently not support now
 }
 
 //函数的依赖关系
@@ -119,20 +121,34 @@ impl<'a> ApiGraph<'a> {
             api_sequences: Vec::new(),
             full_name_map: FullNameMap::new(),
             mod_visibility: ModVisibity::new(_crate_name),
-            generic_functions: Vec::new(),
+            //generic_functions: Vec::new(),
             functions_with_unsupported_fuzzable_types: FxHashSet::default(),
             cache,
         }
     }
 
-    /// 向api_graph中投入function，包括method和bare function
-    pub(crate) fn add_api_function(&mut self, api_fun: ApiFunction) {
-        if api_fun._is_generic_function() {
+    /// 向api_graph中投入function，包括method和bare function，支持泛型
+    pub(crate) fn add_api_function(&mut self, mut api_fun: ApiFunction) {
+        /*if api_fun._is_generic_function() {
             let generic_function = GenericFunction::from(api_fun);
-            self.generic_functions.push(generic_function);
-        } else if api_fun.contains_unsupported_fuzzable_type(self.cache, &self.full_name_map) {
+            // self.generic_functions.push(generic_function);
+        } else*/
+        //泛型函数不会单独考虑
+        if api_fun.contains_unsupported_fuzzable_type(self.cache, &self.full_name_map) {
             self.functions_with_unsupported_fuzzable_types.insert(api_fun.full_name.clone());
         } else {
+            // FIXME:新加入泛型
+            //既然支持了泛型函数，就要初始化generic_substitution
+            for generic_arg in &api_fun._generics.params {
+                //当这个是泛型类型（而不是生命周期等）
+                if let types::GenericParamDefKind::Type { .. } = generic_arg.kind {
+                    let generic_name = generic_arg.name.to_string();
+                    //暂时只支持把泛型替换成i32
+                    api_fun
+                        .generic_substitutions
+                        .insert(generic_name, clean::Type::Primitive(clean::PrimitiveType::I32));
+                }
+            }
             self.api_functions.push(api_fun);
         }
     }
@@ -146,6 +162,13 @@ impl<'a> ApiGraph<'a> {
     pub(crate) fn filter_functions(&mut self) {
         self.filter_functions_defined_on_prelude_type();
         self.filter_api_functions_by_mod_visibility();
+        for (idx, api) in self.api_functions.iter().enumerate() {
+            println!(
+                "api_functions[{}]: {}",
+                idx,
+                api._pretty_print(self.cache, &self.full_name_map)
+            )
+        }
         println!("filtered api functions contain {} apis", self.api_functions.len());
     }
 
@@ -209,7 +232,6 @@ impl<'a> ApiGraph<'a> {
     ///找到所有可能的依赖关系，存在api_dependencies中，供后续使用
     pub(crate) fn find_all_dependencies(&mut self) {
         println!("find_dependencies");
-
         self.api_dependencies.clear();
 
         // 两个api_function之间的dependency
@@ -219,6 +241,7 @@ impl<'a> ApiGraph<'a> {
                 //如果第一个函数是终止节点，就不寻找这样的依赖
                 continue;
             }
+
             if let Some(ty_) = &first_fun.output {
                 let output_type = ty_;
 
@@ -228,13 +251,54 @@ impl<'a> ApiGraph<'a> {
                         //如果第二个节点是开始节点，那么直接跳过
                         continue;
                     }
+                    println!(
+                        "\nThe first function {} is: {}",
+                        i,
+                        first_fun._pretty_print(self.cache, &self.full_name_map)
+                    );
+                    println!(
+                        "The second function {} is: {}",
+                        j,
+                        second_fun._pretty_print(self.cache, &self.full_name_map)
+                    );
+                    //FIXME:写一个替换函数，在这里就把type给替换掉。
 
                     // 下面开始正题
                     // 对于second_fun的每个参数，看看first_fun的返回值是否对应得上
                     for (k, input_type) in second_fun.inputs.iter().enumerate() {
+                        //为了添加泛型支持，在这里先替换
+                        let output_type = match api_util::substitute_type(
+                            output_type.clone(),
+                            &first_fun.generic_substitutions,
+                        ) {
+                            Some(substi) => substi,
+                            None => {
+                                continue;
+                            }
+                        };
+                        let input_type = match api_util::substitute_type(
+                            input_type.clone(),
+                            &second_fun.generic_substitutions,
+                        ) {
+                            Some(substi) => substi,
+                            None => {
+                                continue;
+                            }
+                        };
+
+                        println!(
+                            "output: {}",
+                            api_util::_type_name(&output_type, self.cache, &self.full_name_map)
+                                .as_str()
+                        );
+                        println!(
+                            "input: {}",
+                            api_util::_type_name(&input_type, self.cache, &self.full_name_map)
+                                .as_str()
+                        );
                         let call_type = api_util::_same_type(
-                            output_type,
-                            input_type,
+                            &output_type,
+                            &input_type,
                             true,
                             self.cache,
                             &self.full_name_map,
@@ -245,6 +309,7 @@ impl<'a> ApiGraph<'a> {
                                 continue;
                             }
                             _ => {
+                                println!("ok, it's ok!!!");
                                 //如果可以转换的话，那就存入依赖列表里
                                 let one_dependency = ApiDependency {
                                     output_fun: (ApiType::BareFunction, i),
@@ -260,7 +325,10 @@ impl<'a> ApiGraph<'a> {
             }
         }
 
-        println!("find_dependencies finished!");
+        println!(
+            "find_dependencies finished! Num of dependencies is {}.",
+            self.api_dependencies.len()
+        );
     }
 
     pub(crate) fn _default_generate_sequences(&mut self, lib_name: &str) {
@@ -380,7 +448,7 @@ impl<'a> ApiGraph<'a> {
     //加入对fast mode的支持
     pub(crate) fn bfs(&mut self, max_len: usize, stop_at_end_function: bool, fast_mode: bool) {
         //清空所有的序列
-        self.api_sequences.clear();
+        //self.api_sequences.clear();
         self.reset_visited();
         if max_len < 1 {
             return;
@@ -429,10 +497,10 @@ impl<'a> ApiGraph<'a> {
             }
         }
 
-        //println!("There are total {} sequences after bfs", self.api_sequences.len());
-        if !stop_at_end_function {
+        println!("There are total {} sequences after bfs", self.api_sequences.len());
+        /*if !stop_at_end_function {
             std::process::exit(0);
-        }
+        }*/
     }
 
     //为探索比较深的路径专门进行优化
@@ -656,7 +724,10 @@ impl<'a> ApiGraph<'a> {
 
                 match f {
                     Some((api_func_index, func)) => {
-                        println!("find function, name: {}, ", func.full_name);
+                        println!(
+                            "find function, name: {}, ",
+                            func._pretty_print(self.cache, &self.full_name_map)
+                        );
 
                         let api_type = ApiType::BareFunction;
                         sequence = if let Some(new_sequence) =
@@ -683,7 +754,8 @@ impl<'a> ApiGraph<'a> {
 
         println!("所有被解析出来的function");
         for func in &self.api_functions {
-            print!("{} ", func.full_name);
+            //println!("{} ", func.full_name);
+            println!("{}", func._pretty_print(self.cache, &self.full_name_map));
         }
         println!("打印完了");
 
@@ -1292,12 +1364,12 @@ impl<'a> ApiGraph<'a> {
     //OK: 判断一个函数能否加入给定的序列中,如果可以加入，返回Some(new_sequence),new_sequence是将新的调用加进去之后的情况，否则返回None
     pub(crate) fn is_fun_satisfied(
         &self,
-        input_type: &ApiType,
+        input_fun_type: &ApiType, //其实这玩意没用了
         input_fun_index: usize,
         sequence: &ApiSequence,
     ) -> Option<ApiSequence> {
         //判断一个给定的函数能否加入到一个sequence中去
-        match input_type {
+        match input_fun_type {
             ApiType::BareFunction => {
                 let mut new_sequence = sequence.clone();
                 let mut api_call = ApiCall::_new(input_fun_index);
@@ -1328,15 +1400,26 @@ impl<'a> ApiGraph<'a> {
                 }
                 //对于每个参数进行遍历
                 for (i, current_ty) in input_params.iter().enumerate() {
-                    if api_util::is_fuzzable_type(current_ty, self.cache, &self.full_name_map, None)
-                    {
+                    // 如果参数是fuzzable的话，...
+                    // 在这里T会被替换成concrete type
+                    if api_util::is_fuzzable_type(
+                        current_ty,
+                        self.cache,
+                        &self.full_name_map,
+                        Some(&input_function.generic_substitutions),
+                    ) {
+                        /*
+                        println!(
+                            "param_{} in function {} is fuzzable type",
+                            i, input_function.full_name
+                        );*/
                         //如果当前参数是fuzzable的
                         let current_fuzzable_index = new_sequence.fuzzable_params.len();
                         let fuzzable_call_type = fuzz_type::fuzzable_call_type(
                             current_ty,
                             self.cache,
                             &self.full_name_map,
-                            None,
+                            Some(&input_function.generic_substitutions),
                         );
                         let (fuzzable_type, call_type) =
                             fuzzable_call_type.generate_fuzzable_type_and_call_type();
@@ -1366,9 +1449,16 @@ impl<'a> ApiGraph<'a> {
                             current_fuzzable_index,
                             call_type,
                         );
-                    } else {
+                    }
+                    //如果参数不是fuzzable的话，也就是无法直接被afl转化，就需要看看有没有依赖关系
+                    else {
                         // 如果当前参数不是fuzzable的，那么就去api sequence寻找是否有这个依赖
                         // 也就是说，api sequence里是否有某个api的返回值是它的参数
+
+                        /*println!(
+                            "param_{} in function {} is struct like type",
+                            i, input_function.full_name
+                        );*/
 
                         //FIXME: 处理move的情况
                         let functions_in_sequence_len = sequence.functions.len();
@@ -1388,10 +1478,12 @@ impl<'a> ApiGraph<'a> {
                             if let Some(dependency_index) = self.check_dependency(
                                 api_type,
                                 *index,
-                                input_type,
+                                input_fun_type,
                                 input_fun_index,
                                 i,
                             ) {
+                                // 理论上这里泛型依赖也会出现
+
                                 let dependency_ = self.api_dependencies[dependency_index].clone();
                                 //将覆盖到的边加入到新的sequence中去
                                 new_sequence._add_dependency(dependency_index);
@@ -1469,6 +1561,7 @@ impl<'a> ApiGraph<'a> {
                 }
                 return Some(new_sequence);
             }
+            ApiType::GenericFunction => None,
         }
     }
 
@@ -1545,7 +1638,7 @@ impl<'a> ApiGraph<'a> {
                         );
                     }
                     /******************************************************************************************************** */
-                    //如果当前参数不可fuzz，只能去找依赖
+                    //如果当前参数不可由afl提供，只能去找依赖
                     else {
                         let mut dependency_flag = false;
                         //遍历函数，看看哪个函数的output可以作为当前的param
@@ -1639,6 +1732,7 @@ impl<'a> ApiGraph<'a> {
                 }
                 return Some(new_reverse_sequence);
             }
+            ApiType::GenericFunction => todo!(),
         }
     }
 
@@ -1687,6 +1781,7 @@ impl<'a> ApiGraph<'a> {
                             return false;
                         }
                     }
+                    ApiType::GenericFunction => todo!(),
                 }
             }
         }

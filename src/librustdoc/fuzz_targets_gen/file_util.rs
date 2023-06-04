@@ -108,7 +108,7 @@ static DEFAULT_RANDOM_FILE_NUMBER: usize = 100;
 pub(crate) fn can_write_to_file(crate_name: &String, strategy: GraphTraverseAlgorithm) -> bool {
     match strategy {
         _Default => DEFAULT_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
-        _UseRealWorld => REAL_WORLD_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
+        _Bfs | _UseRealWorld => REAL_WORLD_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
         _ => false, /*
                     _Bfs => todo!(),
                     _FastBfs => todo!(),
@@ -155,7 +155,9 @@ impl FileHelper {
         //按照不同策略生成在不同的文件夹里
         let test_dir = match strategy {
             _Default => DEFAULT_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str(),
-            _UseRealWorld => REAL_WORLD_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str(),
+            _Bfs | _UseRealWorld => {
+                REAL_WORLD_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str()
+            }
             _ => "",
         }
         .to_string();
@@ -181,7 +183,7 @@ impl FileHelper {
         let chosen_sequences = api_graph.api_sequences.clone();
         let mut sequence_map = FxHashMap::default();
         for seq in chosen_sequences {
-            let seq_str = seq.print_function(api_graph, false);
+            let seq_str = seq.print_function(api_graph, true);
             sequence_map.insert(seq_str, seq);
         }
         for (seq_str, _seq) in &sequence_map {
