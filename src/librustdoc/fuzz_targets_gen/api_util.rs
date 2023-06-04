@@ -226,8 +226,7 @@ pub(crate) fn substitute_type(
         //对于 std::core::Vec<T>，替换成std::core::Vec<i32>
         clean::Type::Path { path } => {
             //对于path的每一段（实际上只有一段才会有泛型参数）
-            for segments in &mut path.segments {
-                
+            for segments in &mut path.segments {                
                 //如果这一段的泛型参数是尖括号的形式的话
                 if let crate::clean::GenericArgs::AngleBracketed { args, bindings } = &mut segments.args {
                     //获取泛型参数列表，要求可变的
@@ -245,7 +244,6 @@ pub(crate) fn substitute_type(
 
                             } else {
                                 // 处理没有绑定约束的情况
-                            
                                 match substitute_type(ty.clone(), substitutions){
                                     Some(substi)=>{
                                         *arg = GenericArg::Type(substi.clone());
@@ -396,7 +394,6 @@ pub(crate) fn _same_type_hard_mode(
             //因为在调用之前已经替换过了，所以不应该在这里出现
             println!("!!!{}", _type_name(output_type, cache, full_name_map));
             panic!("这里不应该出现！");
-            
             //CallType::_NotCompatible
         }
         //基本类型
