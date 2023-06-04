@@ -226,7 +226,7 @@ pub(crate) fn substitute_type(
         //对于 std::core::Vec<T>，替换成std::core::Vec<i32>
         clean::Type::Path { path } => {
             //对于path的每一段（实际上只有一段才会有泛型参数）
-            for segments in &mut path.segments {                
+            for segments in &mut path.segments {              
                 //如果这一段的泛型参数是尖括号的形式的话
                 if let crate::clean::GenericArgs::AngleBracketed { args, bindings } = &mut segments.args {
                     //获取泛型参数列表，要求可变的
@@ -268,7 +268,6 @@ pub(crate) fn substitute_type(
                     ty.clone()
                 }None=>{
                     clean::Primitive(PrimitiveType::I32)
-                    
                 }
             }
         }
