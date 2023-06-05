@@ -20,7 +20,7 @@ use crate::formats::item_type::ItemType;
 use crate::formats::FormatRenderer;
 use crate::fuzz_targets_gen::api_graph::ApiGraph;
 use crate::fuzz_targets_gen::extract_dep::{extract_all_dependencies, print_all_dependencies};
-use crate::fuzz_targets_gen::extract_seq::ExtractSequence;
+use crate::fuzz_targets_gen::extract_info::ExtractInfo;
 use crate::fuzz_targets_gen::file_util;
 
 #[derive(Clone)]
@@ -90,16 +90,15 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 print_all_dependencies(tcx, all_dependencies.clone(), true);
 
                 let enable = true;
-                let mut extract_sequemce = ExtractSequence::new();
-                extract_sequemce.extract_sequence(
+                let extract_info = ExtractInfo::new(
                     tcx,
                     krate.name(tcx).to_string(),
                     "csv".to_string(),
-                    all_dependencies,
+                    &all_dependencies,
                     enable,
                 );
 
-                extract_sequemce.print_sequence(
+                extract_info.print_sequence(
                     enable,
                     "/home/yxz/workspace/fuzz/experiment_root/",
                     "csv",

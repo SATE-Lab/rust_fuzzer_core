@@ -8,7 +8,7 @@ mod api_util;
 mod call_type;
 mod context;
 mod extract_dep;
-mod extract_seq;
+mod extract_info;
 mod file_util;
 mod fuzz_type;
 mod generic_function;

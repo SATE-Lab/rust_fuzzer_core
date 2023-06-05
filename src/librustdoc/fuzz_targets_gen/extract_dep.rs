@@ -77,7 +77,7 @@ pub struct CalleeDependency<'tcx> {
     /// k是形式参数编号，从0开始
     /// v是依赖集合
     /// 第k个形参，依赖于哪些source
-    arg_sources: FxHashMap<usize, Vec<Source<'tcx>>>,
+    pub arg_sources: FxHashMap<usize, Vec<Source<'tcx>>>,
     /// 被调用的函数信息
     pub callee: Callee<'tcx>,
     /// 调用点信息
