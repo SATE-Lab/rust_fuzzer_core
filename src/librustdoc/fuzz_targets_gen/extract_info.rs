@@ -15,6 +15,7 @@ use rustc_middle::ty::{self, Ty, TyCtxt};
 pub struct ExtractInfo {
     pub all_sequences: Vec<Vec<String>>, //暂时用不到
     pub dependencies_info: FxHashMap<(String, String), usize>,
+    pub function_info: FxHashMap<String, usize>,
 }
 
 impl ExtractInfo {
@@ -34,7 +35,7 @@ impl ExtractInfo {
             enable,
         );
 
-        let dependencies_info = Self::extract_info(
+        let (dependencies_info, function_info) = Self::extract_info(
             tcx,
             current_crate_name.clone(),
             test_crate_name.clone(),
@@ -42,7 +43,7 @@ impl ExtractInfo {
             enable,
         );
 
-        ExtractInfo { all_sequences, dependencies_info }
+        ExtractInfo { all_sequences, dependencies_info, function_info }
     }
 
     /// 进行一个深度优先搜索，然后生成遍历序列
@@ -180,16 +181,17 @@ impl ExtractInfo {
         test_crate_name: String,
         all_dependencies: &AllDependencies<'tcx>,
         enable: bool,
-    ) -> FxHashMap<(String, String), usize> {
+    ) -> (FxHashMap<(String, String), usize>, FxHashMap<String, usize>) {
         //如果待测crate就是当前crate，那就返回，因为可能解析到非pub
         if current_crate_name == test_crate_name || !enable {
-            return FxHashMap::default();
+            return (FxHashMap::default(), FxHashMap::default());
         }
 
         // 用于剪枝，访问过的API就不用访问了
         let mut visit_set = FxHashSet::default();
         // 依赖哈希表，用于减小文件量的
         let mut pre_succ_map = FxHashMap::default();
+        let mut function_map = FxHashMap::default();
 
         //遍历每一个本地函数
         for (caller_def_id, function) in all_dependencies.functions.iter() {
@@ -235,6 +237,16 @@ impl ExtractInfo {
                         let callee_name = tcx.def_path_str(*callee_def_id);
                         //if crate_name.starts_with(&test_crate_name) {
                         if callee_name.starts_with(&test_crate_name) {
+                            //先加入function_info
+                            if function_map.contains_key(&callee_name) {
+                                function_map.insert(
+                                    callee_name.clone(),
+                                    function_map.get(&callee_name).unwrap() + 1,
+                                );
+                            } else {
+                                function_map.insert(callee_name.clone(), 1);
+                            }
+
                             // 如果是test crate的api
                             // 检查每个参数，如果有依赖关系的话，就可以把元组推入
                             for (_, arg_srcs) in arg_sources {
@@ -242,13 +254,17 @@ impl ExtractInfo {
                                     match arg_src{
                                         crate::fuzz_targets_gen::extract_dep::Source::ReturnVariable(pre_id) => {
                                             let pre_function_name = tcx.def_path_str(*pre_id);
-                                            let succ_function_name = callee_name.clone();
-                                            let tuple = (pre_function_name, succ_function_name);
-                                            //如果有就更新，没有就继续
-                                            if pre_succ_map.contains_key(&tuple) {
-                                                pre_succ_map.insert(tuple.clone(), pre_succ_map.get(&tuple).unwrap()+1);
-                                            }else{
-                                                pre_succ_map.insert(tuple.clone(), 1);
+                                            //只有前驱是tested_lib中的才行
+                                            if pre_function_name.starts_with(&test_crate_name)
+                                            {
+                                                let succ_function_name = callee_name.clone();
+                                                let tuple = (pre_function_name, succ_function_name);
+                                                //如果有就更新，没有就继续
+                                                if pre_succ_map.contains_key(&tuple) {
+                                                    pre_succ_map.insert(tuple.clone(), pre_succ_map.get(&tuple).unwrap()+1);
+                                                }else{
+                                                    pre_succ_map.insert(tuple.clone(), 1);
+                                                }
                                             }
                                         },
                                         _=>{
@@ -287,7 +303,7 @@ impl ExtractInfo {
                 }
             }
         }
-        pre_succ_map
+        (pre_succ_map, function_map)
     }
     /*
     pub fn _extract_sequence_new<'tcx>(
@@ -420,7 +436,7 @@ impl ExtractInfo {
         self.all_sequences = all_seq;
     }*/
 
-    pub fn print_sequence(&self, enable: bool, dir_path: &str, _crate_name: &str) {
+    pub fn _print_sequence(&self, enable: bool, dir_path: &str, _crate_name: &str) {
         if !enable {
             return;
         }
@@ -445,6 +461,60 @@ impl ExtractInfo {
             println!("");
             file.write_all("\n".as_bytes()).expect("write failed");
         }
+        println!("\x1b[94mFinish printing\x1b[0m");
+    }
+
+    pub fn print_dependencies_info(&self, enable: bool, dir_path: &str, _crate_name: &str) {
+        if !enable {
+            return;
+        }
+
+        let dir_path = PathBuf::from(dir_path).join(_crate_name).join("depinfo");
+
+        println!("\x1b[94mStart to print info extracted from corpus.\x1b[0m");
+
+        let mut file =
+            OpenOptions::new().create(true).append(true).open(dir_path).expect("cannot open file");
+        for (idx, ((pre_func, succ_func), num)) in self.dependencies_info.iter().enumerate() {
+            let s = format!("pair_{}:   {}   {}   {}", idx, pre_func, succ_func, num);
+            println!("{}", s);
+            file.write_all(s.as_bytes()).expect("write failed");
+
+            //写入回车
+            println!("");
+            file.write_all("\n".as_bytes()).expect("write failed");
+        }
+
+        println!("\x1b[94mFinish printing\x1b[0m");
+    }
+
+    pub fn print_functions_info(&self, enable: bool, dir_path: &str, _crate_name: &str) {
+        if !enable {
+            return;
+        }
+
+        let dir_path = PathBuf::from(dir_path).join(_crate_name).join("funcinfo");
+
+        println!("\x1b[94mStart to print function info extracted from corpus.\x1b[0m");
+
+        let mut file =
+            OpenOptions::new().create(true).append(true).open(dir_path).expect("cannot open file");
+        for (idx, (func, num)) in self.function_info.iter().enumerate() {
+            let s = format!(
+                "{:?}:   _func_{}:   {}   {}",
+                std::env::current_dir().unwrap(),
+                idx,
+                func,
+                num
+            );
+            println!("{}", s);
+            file.write_all(s.as_bytes()).expect("write failed");
+
+            //写入回车
+            println!("");
+            file.write_all("\n".as_bytes()).expect("write failed");
+        }
+
         println!("\x1b[94mFinish printing\x1b[0m");
     }
 }

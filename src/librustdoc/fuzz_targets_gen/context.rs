@@ -19,7 +19,7 @@ use crate::formats::cache::Cache;
 use crate::formats::item_type::ItemType;
 use crate::formats::FormatRenderer;
 use crate::fuzz_targets_gen::api_graph::ApiGraph;
-use crate::fuzz_targets_gen::extract_dep::{extract_all_dependencies, print_all_dependencies};
+use crate::fuzz_targets_gen::extract_dep::extract_all_dependencies;
 use crate::fuzz_targets_gen::extract_info::ExtractInfo;
 use crate::fuzz_targets_gen::file_util;
 
@@ -81,28 +81,38 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
 
         if target_dir_name == "target" {
             // 解析corpus program
+
+            let tested_lib_name = "csv";
+            let experiment_root = "/home/yxz/workspace/fuzz/experiment_root/";
+
+            if !std::env::current_dir().unwrap().starts_with(experiment_root) {
+                return Ok((cx, krate));
+            }
+
             println!(
                 "\nStart to parse dependencies.\nThe name of the parsed crate is {}.",
                 krate.name(tcx)
             );
             let _ = tcx.sess.time("build_call_graph", || {
                 let all_dependencies = extract_all_dependencies(tcx);
-                print_all_dependencies(tcx, all_dependencies.clone(), true);
+                //print_all_dependencies(tcx, all_dependencies.clone(), true);
 
                 let enable = true;
                 let extract_info = ExtractInfo::new(
                     tcx,
                     krate.name(tcx).to_string(),
-                    "csv".to_string(),
+                    tested_lib_name.to_string(),
                     &all_dependencies,
                     enable,
                 );
-
+                /*
                 extract_info.print_sequence(
                     enable,
                     "/home/yxz/workspace/fuzz/experiment_root/",
                     "csv",
-                );
+                );*/
+                extract_info.print_dependencies_info(enable, experiment_root, tested_lib_name);
+                extract_info.print_functions_info(enable, experiment_root, tested_lib_name);
             });
 
             println!(

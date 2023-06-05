@@ -469,9 +469,10 @@ fn extract_function_call<'tcx>(
                             use def::DefKind::*;
                             match self.tcx.def_kind(def_id) {
                                 Fn | AssocFn => LocalCallType::DirectCall(def_id),
-                                other => {
+                                _other => {
                                     //基本不会触发
-                                    panic!("internal error: unknow call type: {:?}", other);
+                                    return;
+                                    //panic!("internal error: unknow call type: {:?}", other);
                                 }
                             }
                         } else {
@@ -558,13 +559,22 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
             | def::DefKind::Generator => (),
             _ => continue,
         }
-
+        /*
         // 获取mir::Body
         let mir = tcx.mir_built(ty::WithOptConstParam {
             did: function,
             const_param_did: tcx.opt_const_param_of(function),
         });
-        let mir = mir.borrow();
+        //let mir = mir.borrow();
+        //let mir: &mir::Body<'_> = &mir;
+        //use rustc_data_structures::steal::Steal;
+        let mir = match mir {
+            Some(mir) => mir.borrow(),
+            None => continue,
+        };
+        */
+        // 获取mir::Body
+        let mir = tcx.optimized_mir(function);
         let mir: &mir::Body<'_> = &mir;
 
         // caller
@@ -710,7 +720,7 @@ pub fn extract_all_dependencies<'tcx>(tcx: TyCtxt<'tcx>) -> AllDependencies<'tcx
     AllDependencies { functions: all_dependencies }
 }
 
-pub fn print_all_dependencies<'tcx>(
+pub fn _print_all_dependencies<'tcx>(
     tcx: TyCtxt<'tcx>,
     all_dependencies: AllDependencies<'tcx>,
     enable: bool,
