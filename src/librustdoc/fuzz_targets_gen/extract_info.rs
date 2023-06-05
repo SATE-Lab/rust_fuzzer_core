@@ -34,7 +34,13 @@ impl ExtractInfo {
             enable,
         );
 
-        let dependencies_info = Self::extract_info(tcx, current_crate_name.clone(), test_crate_name.clone(), all_dependencies, enable);
+        let dependencies_info = Self::extract_info(
+            tcx,
+            current_crate_name.clone(),
+            test_crate_name.clone(),
+            all_dependencies,
+            enable,
+        );
 
         ExtractInfo { all_sequences, dependencies_info }
     }
@@ -183,8 +189,7 @@ impl ExtractInfo {
         // 用于剪枝，访问过的API就不用访问了
         let mut visit_set = FxHashSet::default();
         // 依赖哈希表，用于减小文件量的
-        let mut pre_succ_map  = FxHashMap::default();
-
+        let mut pre_succ_map = FxHashMap::default();
 
         //遍历每一个本地函数
         for (caller_def_id, function) in all_dependencies.functions.iter() {
@@ -216,7 +221,7 @@ impl ExtractInfo {
 
                     //下面对于每一个被调用函数进行遍历
                     let callee_dependency = dependency_info.callee_dependencies.clone();
-                    for CalleeDependency { callee, arg_sources,.. } in &callee_dependency {
+                    for CalleeDependency { callee, arg_sources, .. } in &callee_dependency {
                         use super::extract_dep::Callee;
 
                         //被调用函数对应的crate_name和DefId
@@ -233,9 +238,8 @@ impl ExtractInfo {
                             // 如果是test crate的api
                             // 检查每个参数，如果有依赖关系的话，就可以把元组推入
                             for (_, arg_srcs) in arg_sources {
-                                for arg_src in arg_srcs{
+                                for arg_src in arg_srcs {
                                     match arg_src{
-                                    
                                         crate::fuzz_targets_gen::extract_dep::Source::ReturnVariable(pre_id) => {
                                             let pre_function_name = tcx.def_path_str(*pre_id);
                                             let succ_function_name = callee_name.clone();
