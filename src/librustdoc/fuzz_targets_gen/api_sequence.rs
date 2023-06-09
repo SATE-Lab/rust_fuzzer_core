@@ -231,6 +231,8 @@ pub(crate) struct ApiSequence {
     pub(crate) _using_traits: Vec<String>,          //需要use引入的traits的路径
     pub(crate) _unsafe_tag: bool,                   //标志这个调用序列是否需要加上unsafe标记
     pub(crate) _moved: FxHashSet<usize>,            //表示哪些返回值已经被move掉，不再能被使用
+    pub(crate) _mut_borrow: FxHashSet<usize>,       //表示哪些可变引用
+    pub(crate) _borrow: FxHashSet<usize>,           //表示哪些不可变引用
     pub(crate) _fuzzable_mut_tag: FxHashSet<usize>, //表示哪些fuzzable的变量需要带上mut标记
     pub(crate) _function_mut_tag: FxHashSet<usize>, //表示哪些function的返回值需要带上mut标记
     pub(crate) _covered_dependencies: FxHashSet<usize>, //表示用到了哪些dependency,即边覆盖率
@@ -243,6 +245,8 @@ impl ApiSequence {
         let _using_traits = Vec::new();
         let _unsafe_tag = false;
         let _moved = FxHashSet::default();
+        let _mut_borrow = FxHashSet::default();
+        let _borrow = FxHashSet::default();
         let _fuzzable_mut_tag = FxHashSet::default();
         let _function_mut_tag = FxHashSet::default();
         let _covered_dependencies = FxHashSet::default();
@@ -252,6 +256,8 @@ impl ApiSequence {
             _using_traits,
             _unsafe_tag,
             _moved,
+            _mut_borrow,
+            _borrow,
             _fuzzable_mut_tag,
             _function_mut_tag,
             _covered_dependencies,
@@ -266,6 +272,7 @@ impl ApiSequence {
             let name = &graph.api_functions[index]._pretty_print(graph.cache, &graph.full_name_map);
             res.push_str(format!("[{}] ", name).as_str());
         }
+        res.push_str("\n");
         res
     }
     /*
@@ -378,11 +385,15 @@ impl ApiSequence {
         }
         res
     }
-
+    //判断序列里的index函数返回值是否被move
     pub(crate) fn _is_moved(&self, index: usize) -> bool {
-        if self._moved.contains(&index) { true } else { false }
+        if self._moved.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
-
+    //插入move
     pub(crate) fn _insert_move_index(&mut self, index: usize) {
         self._moved.insert(index);
     }
@@ -396,7 +407,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_fuzzable_need_mut_tag(&self, index: usize) -> bool {
-        if self._fuzzable_mut_tag.contains(&index) { true } else { false }
+        if self._fuzzable_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn _insert_function_mut_tag(&mut self, index: usize) {
@@ -404,7 +419,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_function_need_mut_tag(&self, index: usize) -> bool {
-        if self._function_mut_tag.contains(&index) { true } else { false }
+        if self._function_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn set_unsafe(&mut self) {

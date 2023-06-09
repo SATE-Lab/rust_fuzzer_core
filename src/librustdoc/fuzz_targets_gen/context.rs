@@ -21,7 +21,28 @@ use crate::formats::FormatRenderer;
 use crate::fuzz_targets_gen::api_graph::ApiGraph;
 use crate::fuzz_targets_gen::extract_dep::extract_all_dependencies;
 use crate::fuzz_targets_gen::extract_info::ExtractInfo;
-use crate::fuzz_targets_gen::file_util;
+use crate::fuzz_targets_gen::file_util::{self};
+use rustc_data_structures::fx::FxHashSet;
+
+lazy_static! {
+    pub static ref REAL_WORLD_CRATE: FxHashSet<String> = {
+        let mut m = FxHashSet::default();
+        m.insert("url");
+        m.insert("regex");
+        m.insert("tui");
+        m.insert("time");
+        m.insert("clap");
+        m.insert("unicode_segmentation");
+        m.insert("chrono");
+        m.insert("byteorder");
+        m.insert("bytes");
+        m.insert("csv");
+        m.insert("smallvec");
+        m.insert("indexmap");
+        let m = m.into_iter().map(|x| x.to_string()).collect();
+        m
+    };
+}
 
 #[derive(Clone)]
 pub(crate) struct Context<'tcx> {
@@ -125,11 +146,13 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 "\nStart to parse tested crate and generate test file.\nThe name of the tested crate is {}.",
                 krate.name(tcx)
             );
-
-            if krate.name(tcx).to_string() != "indexmap" {
-                println!("不是这个crate");
+            let kname = krate.name(tcx).to_string();
+            println!("正在解析: {}", kname);
+            if !REAL_WORLD_CRATE.contains(&kname) {
+                println!("待测库没有这个crate");
                 return Ok((cx, krate));
             }
+            let support_generic = false;
 
             // 新建一个API依赖图
             let mut api_graph = ApiGraph::new(&krate.name(tcx).to_string(), cx.cache());
@@ -147,9 +170,9 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                     cx.clone().add_bare_functions_into_api_graph(tcx, &krate, &mut api_graph);
             }
 
-            api_graph.filter_functions();
+            api_graph.filter_functions(support_generic);
 
-            api_graph.find_all_dependencies();
+            api_graph.find_all_dependencies(support_generic);
 
             use crate::fuzz_targets_gen::api_graph::GraphTraverseAlgorithm::*;
 
@@ -161,10 +184,13 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             );
             */
 
-            let generation_strategy = _Bfs;
+            let generation_strategy = _UseRealWorld;
             api_graph.generate_all_possoble_sequences(
                 generation_strategy,
                 krate.name(tcx).as_str().replace("_", "-").as_str(),
+                20,
+                20,
+                support_generic,
             );
 
             println!("total functions in crate : {:?}", api_graph.api_functions.len());

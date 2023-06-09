@@ -1,3 +1,5 @@
+use super::api_sequence::ReverseApiSequence;
+use super::fuzz_type;
 use crate::clean::{self, types};
 use crate::formats::cache::Cache;
 use crate::fuzz_targets_gen::api_function::ApiFunction;
@@ -9,16 +11,11 @@ use crate::fuzz_targets_gen::impl_util::FullNameMap;
 use crate::fuzz_targets_gen::mod_visibility::ModVisibity;
 use crate::fuzz_targets_gen::prelude_type;
 use itertools::Itertools;
-use rustc_data_structures::fx::{FxHashMap, FxHashSet};
-use std::time::Duration;
-
 use rand::thread_rng;
 use rand::Rng;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_middle::ty::Visibility;
-
-use super::api_sequence::ReverseApiSequence;
-use super::api_util::substitute_type;
-use super::fuzz_type;
+use std::time::Duration;
 //use super::generic_function::GenericFunction;
 
 lazy_static! {
@@ -160,15 +157,27 @@ impl<'a> ApiGraph<'a> {
     }
 
     /// 根据prelude type和可见性来过滤api
-    pub(crate) fn filter_functions(&mut self) {
+    pub(crate) fn filter_functions(&mut self, support_generic: bool) {
         self.filter_functions_defined_on_prelude_type();
         self.filter_api_functions_by_mod_visibility();
-        for (idx, api) in self.api_functions.iter().enumerate() {
+
+        /*for (idx, api) in self.api_functions.iter().enumerate() {
             println!(
                 "api_functions[{}]: {}",
                 idx,
                 api._pretty_print(self.cache, &self.full_name_map)
             )
+        }*/
+
+        // 不支持泛型，就把泛型过滤出来
+        if !support_generic {
+            let mut new_api_function = Vec::new();
+            for func in &self.api_functions {
+                if func._generics.params.len() == 0 {
+                    new_api_function.push(func.clone());
+                }
+            }
+            self.api_functions = new_api_function;
         }
         println!("filtered api functions contain {} apis", self.api_functions.len());
     }
@@ -231,28 +240,32 @@ impl<'a> ApiGraph<'a> {
     }
 
     ///找到所有可能的依赖关系，存在api_dependencies中，供后续使用
-    pub(crate) fn find_all_dependencies(&mut self) {
+    pub(crate) fn find_all_dependencies(&mut self, support_generic: bool) {
         println!("find_dependencies");
         self.api_dependencies.clear();
 
         // 两个api_function之间的dependency
         // 其中i和j分别是first_fun和second_fun在api_graph的index
         for (i, first_fun) in self.api_functions.iter().enumerate() {
-            if first_fun._is_end_function(self.cache, &self.full_name_map) {
+            if first_fun._is_end_function(self.cache, &self.full_name_map, support_generic) {
                 //如果第一个函数是终止节点，就不寻找这样的依赖
                 continue;
             }
 
             if let Some(ty_) = &first_fun.output {
-                let output_type = ty_;
+                let mut output_type = ty_.clone();
 
                 for (j, second_fun) in self.api_functions.iter().enumerate() {
                     //FIXME:是否要把i=j的情况去掉？
-                    if second_fun._is_start_function(self.cache, &self.full_name_map) {
+                    if second_fun._is_start_function(
+                        self.cache,
+                        &self.full_name_map,
+                        support_generic,
+                    ) {
                         //如果第二个节点是开始节点，那么直接跳过
                         continue;
                     }
-                    println!(
+                    /*println!(
                         "\nThe first function {} is: {}",
                         i,
                         first_fun._pretty_print(self.cache, &self.full_name_map)
@@ -261,14 +274,15 @@ impl<'a> ApiGraph<'a> {
                         "The second function {} is: {}",
                         j,
                         second_fun._pretty_print(self.cache, &self.full_name_map)
-                    );
+                    );*/
                     //FIXME:写一个替换函数，在这里就把type给替换掉。
 
                     // 下面开始正题
                     // 对于second_fun的每个参数，看看first_fun的返回值是否对应得上
                     for (k, input_type) in second_fun.inputs.iter().enumerate() {
+                        let mut input_type = input_type.clone();
                         //为了添加泛型支持，在这里先替换
-                        println!(
+                        /*println!(
                             "替换前output: {}",
                             api_util::_type_name(&output_type, self.cache, &self.full_name_map)
                                 .as_str()
@@ -277,28 +291,28 @@ impl<'a> ApiGraph<'a> {
                             "替换前input: {}",
                             api_util::_type_name(&input_type, self.cache, &self.full_name_map)
                                 .as_str()
-                        );
-
-                        let output_type = match api_util::substitute_type(
-                            output_type.clone(),
-                            &first_fun.generic_substitutions,
-                        ) {
-                            Some(substi) => substi,
-                            None => {
-                                continue;
-                            }
-                        };
-                        let input_type = match api_util::substitute_type(
-                            input_type.clone(),
-                            &second_fun.generic_substitutions,
-                        ) {
-                            Some(substi) => substi,
-                            None => {
-                                continue;
-                            }
-                        };
-
-                        println!(
+                        );*/
+                        if support_generic {
+                            output_type = match api_util::substitute_type(
+                                output_type.clone(),
+                                &first_fun.generic_substitutions,
+                            ) {
+                                Some(substi) => substi,
+                                None => {
+                                    continue;
+                                }
+                            };
+                            input_type = match api_util::substitute_type(
+                                input_type.clone(),
+                                &second_fun.generic_substitutions,
+                            ) {
+                                Some(substi) => substi,
+                                None => {
+                                    continue;
+                                }
+                            };
+                        }
+                        /*println!(
                             "替换后output: {}",
                             api_util::_type_name(&output_type, self.cache, &self.full_name_map)
                                 .as_str()
@@ -307,7 +321,7 @@ impl<'a> ApiGraph<'a> {
                             "替换后input: {}",
                             api_util::_type_name(&input_type, self.cache, &self.full_name_map)
                                 .as_str()
-                        );
+                        );*/
                         let call_type = api_util::_same_type(
                             &output_type,
                             &input_type,
@@ -321,7 +335,7 @@ impl<'a> ApiGraph<'a> {
                                 continue;
                             }
                             _ => {
-                                println!("ok, it's ok!!!");
+                                //println!("ok, it's ok!!!");
                                 //如果可以转换的话，那就存入依赖列表里
                                 let one_dependency = ApiDependency {
                                     output_fun: (ApiType::BareFunction, i),
@@ -345,7 +359,13 @@ impl<'a> ApiGraph<'a> {
 
     pub(crate) fn _default_generate_sequences(&mut self, lib_name: &str) {
         //BFS + backward search
-        self.generate_all_possoble_sequences(GraphTraverseAlgorithm::_BfsEndPoint, lib_name);
+        self.generate_all_possoble_sequences(
+            GraphTraverseAlgorithm::_BfsEndPoint,
+            lib_name,
+            300,
+            200,
+            false,
+        );
         self._try_to_cover_unvisited_nodes();
 
         // backward search
@@ -356,6 +376,9 @@ impl<'a> ApiGraph<'a> {
         &mut self,
         algorithm: GraphTraverseAlgorithm,
         lib_name: &str,
+        max_num: usize,
+        max_len: usize,
+        support_generic: bool,
     ) {
         //BFS序列的最大长度：即为函数的数量,或者自定义
         //let bfs_max_len = self.api_functions.len();
@@ -391,6 +414,7 @@ impl<'a> ApiGraph<'a> {
             }
             GraphTraverseAlgorithm::_TryDeepBfs => {
                 println!("using try deep bfs");
+                self.real_world(lib_name);
                 self._try_deep_bfs(max_sequence_number);
             }
             GraphTraverseAlgorithm::_RandomWalk => {
@@ -410,7 +434,8 @@ impl<'a> ApiGraph<'a> {
             }
             GraphTraverseAlgorithm::_UseRealWorld => {
                 println!("using realworld to generate");
-                self.real_world(lib_name);
+                //self.real_world(lib_name);
+                self.my_method(lib_name, max_num, max_len, support_generic);
             }
         }
     }
@@ -476,7 +501,7 @@ impl<'a> ApiGraph<'a> {
         for len in 0..max_len {
             let mut tmp_sequences = Vec::new();
             for sequence in &self.api_sequences {
-                if stop_at_end_function && self.is_sequence_ended(sequence) {
+                if stop_at_end_function && self.is_sequence_ended(sequence, false) {
                     //如果需要引入终止函数，并且当前序列的最后一个函数是终止函数，那么就不再继续添加
                     continue;
                 }
@@ -545,7 +570,7 @@ impl<'a> ApiGraph<'a> {
 
             let mut tmp_sequences = Vec::new();
             for sequence in &self.api_sequences {
-                if self.is_sequence_ended(sequence) {
+                if self.is_sequence_ended(sequence, false) {
                     //如果需要引入终止函数，并且当前序列的最后一个函数是终止函数，那么就不再继续添加
                     continue;
                 }
@@ -616,7 +641,7 @@ impl<'a> ApiGraph<'a> {
             let chosen_sequence_index = rng.gen_range(0, current_sequence_len);
             let chosen_sequence = &self.api_sequences[chosen_sequence_index];
             //如果需要在终止节点处停止
-            if stop_at_end_function && self.is_sequence_ended(&chosen_sequence) {
+            if stop_at_end_function && self.is_sequence_ended(&chosen_sequence, false) {
                 continue;
             }
 
@@ -829,6 +854,419 @@ impl<'a> ApiGraph<'a> {
         println!("sequences len is {}", self.api_sequences.len());
     }
 
+    pub(crate) fn my_method(
+        &mut self,
+        lib_name: &str,
+        max_num: usize,
+        max_len: usize,
+        support_generic: bool,
+    ) {
+        use std::fs::File;
+        use std::io::{BufRead, BufReader};
+
+        let mut depinfo = FxHashMap::default();
+        let mut funcinfo = FxHashMap::default();
+
+        let depinfo_file_path =
+            format!("/home/yxz/workspace/fuzz/experiment_root/{}/depinfo.txt", lib_name);
+        match File::open(depinfo_file_path) {
+            Ok(file) => {
+                let reader = BufReader::new(file);
+                for line in reader.lines() {
+                    let parts = line
+                        .unwrap()
+                        .split("  |  ")
+                        .into_iter()
+                        .map(|x| x.to_string())
+                        .collect_vec();
+                    let cnt = parts[1].parse::<usize>().unwrap();
+                    let (func1, func2) = parts[2]
+                        .split("   ")
+                        .into_iter()
+                        .map(|x| x.to_string())
+                        .collect_tuple()
+                        .unwrap();
+
+                    //把 (func2, cnt) 存入 func1对应的后续列表中
+
+                    if depinfo.contains_key(&func1) {
+                        let inner_map: &mut FxHashMap<String, usize> =
+                            depinfo.get_mut(&func1).unwrap();
+                        inner_map
+                            .entry(func2.clone())
+                            .and_modify(|value| *value += cnt)
+                            .or_insert(cnt);
+                    } else {
+                        let mut inner_map = FxHashMap::default();
+                        inner_map.insert(func2.clone(), cnt);
+                        depinfo.insert(func1.clone(), inner_map);
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        let funcinfo_file_path =
+            format!("/home/yxz/workspace/fuzz/experiment_root/{}/funcinfo.txt", lib_name);
+        match File::open(funcinfo_file_path) {
+            Ok(file) => {
+                let reader = BufReader::new(file);
+                for line in reader.lines() {
+                    let parts = line
+                        .unwrap()
+                        .split("  |  ")
+                        .into_iter()
+                        .map(|x| x.to_string())
+                        .collect_vec();
+                    let cnt = parts[1].parse::<usize>().unwrap();
+                    let func = &parts[2].clone();
+
+                    //把 (func, cnt)存入funcindo中
+
+                    funcinfo.entry(func.clone()).and_modify(|value| *value += cnt).or_insert(cnt);
+                }
+            }
+            _ => {}
+        }
+
+        {
+            println!("打印依赖信息！");
+            //打印依赖频率信息
+            for (func_name, inner_map) in &depinfo {
+                print!("Func : [{}]-> \n\t", func_name);
+                for (succ_name, cnt) in inner_map {
+                    print!("[{} ];{}  ", succ_name, cnt);
+                }
+                println!("\n");
+            }
+            println!("");
+
+            println!("打印函数频率信息！");
+            //打印函数频率信息
+            for (func_name, cnt) in &funcinfo {
+                print!("[{}];[cnt={}]\t", func_name, cnt);
+            }
+            println!("");
+
+            println!("打印所有被解析出来的函数");
+            for (index, func) in self.api_functions.iter().enumerate() {
+                //println!("{} ", func.full_name);
+                println!("{} {}", index, func._pretty_print(self.cache, &self.full_name_map));
+            }
+            println!("");
+        }
+
+        let _function_succ_tables_map = construct_function_succ_table(self, &depinfo);
+        let _start_functions = extract_start_function(self, support_generic);
+
+        let mut sequences: Vec<ApiSequence> = Vec::new();
+
+        //FIXME: 在这里编写逻辑
+        loop {
+            if sequences.len() >= max_num {
+                break;
+            }
+
+            //初始化当前sequence
+            let mut sequence = ApiSequence::new();
+            let mut indexs_in_sequence: Vec<usize> = Vec::new();
+
+            let mut need_new: bool = false;
+
+            //获得随机start函数在全局的index
+            let start_idx = _start_functions[rand_num(0, _start_functions.len())];
+            sequence = match self.is_fun_satisfied(&ApiType::BareFunction, start_idx, &sequence) {
+                Some(seq) => {
+                    indexs_in_sequence.push(start_idx);
+                    seq
+                }
+                None => continue,
+            };
+
+            loop {
+                if sequence.len() >= max_len {
+                    break;
+                }
+                let rand = rand_num(0, sequence.len() + 5);
+                //println!("rand = {}", rand);
+                if rand == 0 || need_new {
+                    //有1/(len+5)的概率接触到new
+                    //获得随机start函数在全局的index
+                    //println!("选择start");
+                    assert!(start_idx > 0);
+                    let start_idx = _start_functions[rand_num(0, _start_functions.len())];
+                    sequence =
+                        match self.is_fun_satisfied(&ApiType::BareFunction, start_idx, &sequence) {
+                            Some(seq) => {
+                                indexs_in_sequence.push(start_idx);
+                                //加入了new，就可以了
+                                need_new = false;
+                                seq
+                            }
+                            None => continue,
+                        };
+                } else {
+                    //println!("选择后继");
+                    //还有 1-l/(1en+5)选到其他
+                    /*
+                    let succ_idxs = _get_succ_indexs(
+                        &sequence,
+                        &indexs_in_sequence,
+                        &_function_succ_tables_map,
+                    );
+                    let mut cnt = 0;
+                    loop {
+                        cnt += 1;
+                        if cnt > succ_idxs.len() {
+                            break;
+                        }
+                        let rand = rand_num(0, succ_idxs.len());
+                        let succ_idx = succ_idxs[rand];
+                        sequence = match self.is_fun_satisfied(
+                            &ApiType::BareFunction,
+                            succ_idx,
+                            &sequence,
+                        ) {
+                            Some(seq) => {
+                                indexs_in_sequence.push(start_idx);
+                                seq
+                            }
+                            None => continue,
+                        };
+                        break;
+                    }*/
+
+                    let available_function_indexs =
+                        _get_available_function_indexs(self, &sequence, &_function_succ_tables_map);
+                    if available_function_indexs.is_empty() {
+                        //可获得的没了，说明需要start函数了
+                        need_new = true;
+                        continue;
+                    }
+                    //随机找到序列中一个可获得的返回值
+                    let rand_index = rand_num(0, available_function_indexs.len());
+                    let selected_function_index = available_function_indexs[rand_index];
+
+                    //找到后继表
+                    let selected_succ_table =
+                        _function_succ_tables_map.get(&selected_function_index).unwrap();
+
+                    //计算权重
+                    let weights =
+                        selected_succ_table.iter().map(|(_, freq, _)| *freq).collect_vec();
+                    let normalized_weights = normalize_weights(&weights);
+
+                    let mut succ_index = 0;
+
+                    for _ in 0..3 {
+                        let select_immutable = _select_immutable_or_not(sequence.len(), max_len);
+                        match _random_select(&normalized_weights) {
+                            Some(i) => {
+                                //先存着
+                                succ_index = i;
+
+                                let (_, _, dep) = &selected_succ_table[i];
+                                let input_func_index = dep.input_fun.1;
+                                let input_api_function = &self.api_functions[input_func_index];
+                                let input_type = &input_api_function.inputs[dep.input_param_index];
+                                let call_type = &dep.call_type;
+                                if select_immutable
+                                    && api_util::_is_immutable_borrow_occurs(input_type, call_type)
+                                {
+                                    //可以 break
+                                    break;
+                                } else {
+                                    //不行，继续
+                                    continue;
+                                }
+                            }
+                            None => succ_index = 0,
+                        };
+                        break;
+                    }
+                    //let succ_index = 0;
+                    //println!("succ_index = {:?}", succ_index);
+                    let (succ_api_function_index, _, _) = &selected_succ_table[succ_index];
+                    //println!("succ_api_func_index = {}", succ_api_function_index);
+                    sequence = match self.is_fun_satisfied(
+                        &ApiType::BareFunction,
+                        *succ_api_function_index,
+                        &sequence,
+                    ) {
+                        Some(seq) => {
+                            indexs_in_sequence.push(*succ_api_function_index);
+                            seq
+                        }
+                        None => continue,
+                    };
+                }
+            }
+
+            sequences.push(sequence);
+        }
+
+        //最后赋值给graph.api_sequences
+        self.api_sequences = sequences;
+
+        /// 归一化函数
+        /// 导致每个差距都在20以内        
+        #[allow(dead_code)]
+        fn normalize_weights(weights: &Vec<usize>) -> Vec<f32> {
+            // 使用对数函数进行调整
+            let mut weights = weights.iter().map(|x| *x as f32).collect_vec();
+
+            for weight in weights.iter_mut() {
+                *weight = (*weight + 2.0).ln();
+            }
+
+            // 计算归一化前的最大值和最小值
+            let max_value = *weights.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+            let min_value = *weights.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+
+            // 缩放权重，使其范围在0.05到0.95之间
+            for weight in weights.iter_mut() {
+                *weight = 0.05 + ((*weight - min_value) * 0.9) / (1.0 + max_value - min_value);
+            }
+            //println!("归一化后的权重：{:?}", weights);
+            weights
+        }
+
+        /// 构造函数后继表
+        fn construct_function_succ_table(
+            graph: &mut ApiGraph<'_>,
+            depinfo: &FxHashMap<String, FxHashMap<String, usize>>,
+        ) -> FxHashMap<usize, Vec<(usize, usize, ApiDependency)>> {
+            let mut function_succ_tables = FxHashMap::default();
+            //对每个API初始化它们的表
+            for i in 0..graph.api_functions.len() {
+                function_succ_tables.insert(i, Vec::new());
+            }
+
+            for api_dependency in &graph.api_dependencies {
+                let output_func_index = api_dependency.output_fun.1;
+                let input_func_index = api_dependency.input_fun.1;
+
+                let output_func_name = &graph.api_functions[output_func_index].full_name;
+                let input_func_name = &graph.api_functions[input_func_index].full_name;
+
+                //因为前面初始化了，所以unwrap肯定没问题
+                let output_func_table = function_succ_tables.get_mut(&output_func_index).unwrap();
+
+                if depinfo.contains_key(output_func_name) {
+                    let inner_map = depinfo.get(output_func_name).unwrap();
+                    if inner_map.contains_key(input_func_name) {
+                        let freq = inner_map.get(input_func_name).unwrap();
+                        output_func_table.push((input_func_index, *freq, api_dependency.clone()));
+                    } else {
+                        output_func_table.push((input_func_index, 0, api_dependency.clone()));
+                    }
+                } else {
+                    output_func_table.push((input_func_index, 0, api_dependency.clone()));
+                }
+            }
+
+            for (output, table) in &function_succ_tables {
+                for (input, freq, _) in table {
+                    let output_func_name = &graph.api_functions[*output].full_name;
+                    let input_func_name = &graph.api_functions[*input].full_name;
+                    println!(
+                        "[first function: {} {}], [second function: {} {}], [freq: {}]",
+                        output, output_func_name, input, input_func_name, freq
+                    );
+                }
+            }
+
+            function_succ_tables
+        }
+
+        fn extract_start_function(api_graph: &ApiGraph<'_>, support_generic: bool) -> Vec<usize> {
+            let mut res = Vec::new();
+            for (index, api_function) in api_graph.api_functions.iter().enumerate() {
+                if api_function._is_start_function(
+                    api_graph.cache,
+                    &api_graph.full_name_map,
+                    support_generic,
+                ) {
+                    println!(
+                        "Start func: {}",
+                        api_function._pretty_print(api_graph.cache, &api_graph.full_name_map)
+                    );
+                    res.push(index);
+                }
+            }
+            println!("Start function有{}个", res.len());
+
+            res
+        }
+
+        /// [min, max)
+        fn rand_num(min: usize, max: usize) -> usize {
+            let mut rng = rand::thread_rng();
+            let random_number = rng.gen_range(min, max);
+
+            //println!("随机数: {}", random_number);
+            random_number
+        }
+
+        fn _get_succ_indexs(
+            //api_graph: &ApiGraph<'_>,
+            sequence: &ApiSequence,
+            indexs_in_sequence: &Vec<usize>,
+            _function_succ_tables_map: &FxHashMap<usize, Vec<(usize, usize, ApiDependency)>>,
+        ) -> Vec<usize> {
+            let mut res = FxHashSet::default();
+            let mut filtered_indexs = Vec::new();
+            for (apicall_idx, func_index) in indexs_in_sequence.iter().enumerate() {
+                if !sequence._is_moved(apicall_idx) {
+                    filtered_indexs.push(*func_index);
+                }
+            }
+
+            for index in filtered_indexs {
+                let table = _function_succ_tables_map.get(&index).unwrap(); //这里不会出现问题
+                for (succ, _, _) in table {
+                    res.insert(*succ);
+                }
+            }
+            res.into_iter().collect_vec()
+        }
+
+        //获得sequence里面返回值没有被move的函数的api_function index
+        fn _get_available_function_indexs(
+            _api_graph: &ApiGraph<'_>,
+            sequence: &ApiSequence,
+            succ_tables: &FxHashMap<usize, Vec<(usize, usize, ApiDependency)>>,
+        ) -> Vec<usize> {
+            let mut res = Vec::new();
+            for (api_call_index, api) in sequence.functions.iter().enumerate() {
+                let api_function_index = api.func.1;
+                //如果没有被move，并且有output
+                if succ_tables.get(&api_function_index).unwrap().len() > 0
+                    && !sequence._is_moved(api_call_index)
+                {
+                    //println!("funcname: {}, ", _api_graph.api_functions[api_call_index].full_name);
+                    res.push(api_function_index);
+                }
+            }
+            return res;
+        }
+
+        fn _random_select(probabilities: &Vec<f32>) -> Option<usize> {
+            use rand::prelude::SliceRandom;
+            let mut rng = thread_rng();
+            let weighted_indices: Vec<usize> = (0..probabilities.len()).collect();
+            let dist = weighted_indices.choose_weighted(&mut rng, |&i| probabilities[i]).ok()?;
+            Some(*dist)
+        }
+        fn _select_immutable_or_not(i: usize, max_len: usize) -> bool {
+            //选择不可变引用，随着1/4概率增大到5/8
+            let p_of_immutable_ref = ((max_len / 6 + i) as f32) / ((i + max_len) as f32);
+            let rand_from_0_to_99 = rand_num(0, 100);
+
+            rand_from_0_to_99 < (p_of_immutable_ref as usize) * 100
+        }
+    }
+
     pub(crate) fn _choose_candidate_sequence_for_merge(&self) -> Vec<usize> {
         let mut res = Vec::new();
         let all_sequence_number = self.api_sequences.len();
@@ -836,7 +1274,7 @@ impl<'a> ApiGraph<'a> {
             let api_sequence = &self.api_sequences[i];
             let dead_code = api_sequence._dead_code(self);
             let api_sequence_len = api_sequence.len();
-            if self.is_sequence_ended(api_sequence) {
+            if self.is_sequence_ended(api_sequence, false) {
                 //如果当前序列已经结束
                 continue;
             }
@@ -1383,15 +1821,20 @@ impl<'a> ApiGraph<'a> {
         input_fun_index: usize,
         sequence: &ApiSequence,
     ) -> Option<ApiSequence> {
+        use super::api_util::substitute_type;
         //判断一个给定的函数能否加入到一个sequence中去
         match input_fun_type {
             ApiType::BareFunction => {
                 let mut new_sequence = sequence.clone();
                 let mut api_call = ApiCall::_new(input_fun_index);
 
-                let mut _moved_indexes = FxHashSet::default(); //用来保存发生move的那些语句的index
+                let mut _moved_indexes = new_sequence._moved.clone(); //用来保存发生move的那些语句的index
                 let mut _multi_mut = FxHashSet::default(); //用来保存会被多次可变引用的情况
                 let mut _immutable_borrow = FxHashSet::default(); //不可变借用
+
+                //下面是全局借用和可变借用标记
+                //let mut global_mut_borrow = new_sequence._mut_borrow.clone();
+                //let mut global_borrow = new_sequence._borrow.clone();
 
                 //函数
                 let input_function = &self.api_functions[input_fun_index];
@@ -1479,10 +1922,242 @@ impl<'a> ApiGraph<'a> {
                         // 如果当前参数不是fuzzable的，那么就去api sequence寻找是否有这个依赖
                         // 也就是说，api sequence里是否有某个api的返回值是它的参数
 
-                        /*println!(
-                            "param_{} in function {} is struct like type",
-                            i, input_function.full_name
-                        );*/
+                        //FIXME: 处理move的情况
+                        let functions_in_sequence_len = sequence.functions.len();
+                        let mut dependency_flag = false;
+
+                        for function_index in 0..functions_in_sequence_len {
+                            //每次换个api，都会换掉
+
+                            // 如果这个sequence里面的该函数返回值已经被move掉了，那么就跳过，不再能被使用了
+                            // 后面的都是默认这个返回值没有被move，而是被可变借用或不可变借用
+                            if _moved_indexes.contains(&function_index) {
+                                continue;
+                            }
+
+                            //获取序列中对应函数的api_call
+                            let found_function = &new_sequence.functions[function_index];
+                            let (api_type, index) = &found_function.func;
+
+                            //如果有依赖关系，才有后面的说法
+                            if let Some(dependency_index) = self.check_dependency(
+                                api_type,
+                                *index,
+                                input_fun_type,
+                                input_fun_index,
+                                i,
+                            ) {
+                                // 理论上这里泛型依赖也会出现
+
+                                let dependency_ = self.api_dependencies[dependency_index].clone();
+                                //将覆盖到的边加入到新的sequence中去
+                                new_sequence._add_dependency(dependency_index);
+                                //找到了依赖，当前参数是可以被满足的，设置flag并退出循环
+                                dependency_flag = true;
+
+                                //如果满足move发生的条件
+                                if api_util::_move_condition(current_ty, &dependency_.call_type) {
+                                    println!(
+                                        "！！！！！！！！！！！！！！！！！！！！移动，{}, {}",
+                                        api_util::_type_name(
+                                            current_ty,
+                                            self.cache,
+                                            &self.full_name_map
+                                        ),
+                                        &dependency_.call_type._to_call_string(
+                                            &"hhhhhh".to_string(),
+                                            self.cache,
+                                            &self.full_name_map
+                                        )
+                                    );
+                                    if _multi_mut.contains(&function_index)
+                                        || _immutable_borrow.contains(&function_index)
+                                    {
+                                        dependency_flag = false;
+                                        continue;
+                                    } else {
+                                        _moved_indexes.insert(function_index);
+                                    }
+                                }
+                                //如果当前调用是可变借用
+                                else if api_util::_is_mutable_borrow_occurs(
+                                    current_ty,
+                                    &dependency_.call_type,
+                                ) {
+                                    println!(
+                                        "！！！！！！！！！！！！！！！！！！！！可变借用，{}, {}",
+                                        api_util::_type_name(
+                                            current_ty,
+                                            self.cache,
+                                            &self.full_name_map
+                                        ),
+                                        &dependency_.call_type._to_call_string(
+                                            &"hhhhhh".to_string(),
+                                            self.cache,
+                                            &self.full_name_map
+                                        )
+                                    );
+
+                                    //如果在前面的参数已经被借用过了
+                                    if _multi_mut.contains(&function_index)
+                                        || _immutable_borrow.contains(&function_index)
+                                    {
+                                        dependency_flag = false;
+                                        continue;
+                                    } else {
+                                        _multi_mut.insert(function_index);
+                                        //global_mut_borrow.insert(function_index);
+                                    }
+                                }
+                                //如果当前调用是引用，且之前已经被可变引用过，那么这个引用是非法的
+                                else if api_util::_is_immutable_borrow_occurs(
+                                    current_ty,
+                                    &dependency_.call_type,
+                                ) {
+                                    println!(
+                                        "！！！！！！！！！！！！！！！！！！！！不可变借用，{}, {}",
+                                        api_util::_type_name(
+                                            current_ty,
+                                            self.cache,
+                                            &self.full_name_map
+                                        ),
+                                        &dependency_.call_type._to_call_string(&"hhhhhh".to_string(), self.cache, &self.full_name_map)
+                                    );
+
+                                    //如果前面的参数已经被可变借用了
+                                    if _multi_mut.contains(&function_index) {
+                                        dependency_flag = false;
+                                        continue;
+                                    } else {
+                                        _immutable_borrow.insert(function_index);
+                                        //global_borrow.insert(function_index);
+                                    }
+                                }
+
+                                //参数需要加mut 标记的话
+                                if api_util::_need_mut_tag(&dependency_.call_type) {
+                                    new_sequence._insert_function_mut_tag(function_index);
+                                }
+                                //如果call type是unsafe的，那么给sequence加上unsafe标记
+                                if dependency_.call_type.unsafe_call_type()._is_unsafe() {
+                                    new_sequence.set_unsafe();
+                                }
+                                api_call._add_param(
+                                    ParamType::_FunctionReturn,
+                                    function_index,
+                                    dependency_.call_type,
+                                );
+                                break;
+                            }
+                        }
+                        if !dependency_flag {
+                            //如果这个参数没有寻找到依赖，则这个函数不可以被加入到序列中
+                            return None;
+                        }
+                    }
+                }
+
+                //所有参数都可以找到依赖，那么这个函数就可以加入序列
+                new_sequence._add_fn(api_call);
+                new_sequence._moved = _moved_indexes;
+                //new_sequence._mut_borrow = global_mut_borrow;
+                //new_sequence._borrow = global_borrow;
+
+                if new_sequence._contains_multi_dynamic_length_fuzzable() {
+                    //如果新生成的序列包含多维可变的参数，就不把这个序列加进去
+                    return None;
+                }
+                return Some(new_sequence);
+            }
+            ApiType::GenericFunction => None,
+        }
+    }
+
+    /*
+    //OK: 判断一个函数能否加入给定的序列中,如果可以加入，返回Some(new_sequence),new_sequence是将新的调用加进去之后的情况，否则返回None
+    pub(crate) fn is_fun_satisfied(
+        &self,
+        input_type: &ApiType,
+        input_fun_index: usize,
+        sequence: &ApiSequence,
+    ) -> Option<ApiSequence> {
+        //判断一个给定的函数能否加入到一个sequence中去
+        match input_type {
+            ApiType::BareFunction => {
+                let mut new_sequence = sequence.clone();
+                let mut api_call = ApiCall::_new(input_fun_index);
+
+                let mut _moved_indexes = FxHashSet::default(); //用来保存发生move的那些语句的index
+                let mut _multi_mut = FxHashSet::default(); //用来保存会被多次可变引用的情况
+                let mut _immutable_borrow = FxHashSet::default(); //不可变借用
+
+                //函数
+                let input_function = &self.api_functions[input_fun_index];
+
+                //如果是个unsafe函数，给sequence添加unsafe标记
+                if input_function._unsafe_tag._is_unsafe() {
+                    new_sequence.set_unsafe();
+                }
+                //如果用到了trait，添加到序列的trait列表
+                if input_function._trait_full_path.is_some() {
+                    let trait_full_path = input_function._trait_full_path.as_ref().unwrap();
+                    new_sequence.add_trait(trait_full_path);
+                }
+
+                //看看之前序列的返回值是否可以作为它的参数
+                let input_params = &input_function.inputs;
+                if input_params.is_empty() {
+                    //无需输入参数，直接是可满足的
+                    new_sequence._add_fn(api_call);
+                    return Some(new_sequence);
+                }
+                //对于每个参数进行遍历
+                for (i, current_ty) in input_params.iter().enumerate() {
+                    if api_util::is_fuzzable_type(
+                        current_ty,
+                        self.cache,
+                        &self.full_name_map,
+                        Some(&input_function.generic_substitutions),
+                    ) {
+                        //如果当前参数是fuzzable的
+                        let current_fuzzable_index = new_sequence.fuzzable_params.len();
+                        let fuzzable_call_type = fuzz_type::fuzzable_call_type(
+                            current_ty,
+                            self.cache,
+                            &self.full_name_map,
+                            Some(&input_function.generic_substitutions),
+                        );
+                        let (fuzzable_type, call_type) =
+                            fuzzable_call_type.generate_fuzzable_type_and_call_type();
+
+                        //如果出现了下面这段话，说明出现了Fuzzable参数但不知道如何参数化的
+                        //典型例子是tuple里面出现了引用（&usize），这种情况不再去寻找dependency，直接返回无法添加即可
+                        match &fuzzable_type {
+                            FuzzableType::NoFuzzable => {
+                                //println!("Fuzzable Type Error Occurs!");
+                                //println!("type = {:?}", current_ty);
+                                //println!("fuzzable_call_type = {:?}", fuzzable_call_type);
+                                //println!("fuzzable_type = {:?}", fuzzable_type);
+                                return None;
+                            }
+                            _ => {}
+                        }
+
+                        //判断要不要加mut tag
+                        if api_util::_need_mut_tag(&call_type) {
+                            new_sequence._insert_fuzzable_mut_tag(current_fuzzable_index);
+                        }
+
+                        //添加到sequence中去
+                        new_sequence.fuzzable_params.push(fuzzable_type);
+                        api_call._add_param(
+                            ParamType::_FuzzableType,
+                            current_fuzzable_index,
+                            call_type,
+                        );
+                    } else {
+                        // 如果当前参数不是fuzzable的，那么就去api sequence寻找是否有这个依赖
+                        // 也就是说，api sequence里是否有某个api的返回值是它的参数
 
                         //FIXME: 处理move的情况
                         let functions_in_sequence_len = sequence.functions.len();
@@ -1502,12 +2177,10 @@ impl<'a> ApiGraph<'a> {
                             if let Some(dependency_index) = self.check_dependency(
                                 api_type,
                                 *index,
-                                input_fun_type,
+                                input_type,
                                 input_fun_index,
                                 i,
                             ) {
-                                // 理论上这里泛型依赖也会出现
-
                                 let dependency_ = self.api_dependencies[dependency_index].clone();
                                 //将覆盖到的边加入到新的sequence中去
                                 new_sequence._add_dependency(dependency_index);
@@ -1585,9 +2258,9 @@ impl<'a> ApiGraph<'a> {
                 }
                 return Some(new_sequence);
             }
-            ApiType::GenericFunction => None,
+            ApiType::GenericFunction => todo!(),
         }
-    }
+    }*/
 
     /// 从后往前推，做一个dfs
     pub(crate) fn reverse_construct(
@@ -1789,7 +2462,7 @@ impl<'a> ApiGraph<'a> {
     }
 
     //判断一个调用序列是否已经到达终止端点
-    fn is_sequence_ended(&self, api_sequence: &ApiSequence) -> bool {
+    fn is_sequence_ended(&self, api_sequence: &ApiSequence, support_generic: bool) -> bool {
         let functions = &api_sequence.functions;
         let last_fun = functions.last();
         match last_fun {
@@ -1799,7 +2472,11 @@ impl<'a> ApiGraph<'a> {
                 match api_type {
                     ApiType::BareFunction => {
                         let last_func = &self.api_functions[*index];
-                        if last_func._is_end_function(self.cache, &self.full_name_map) {
+                        if last_func._is_end_function(
+                            self.cache,
+                            &self.full_name_map,
+                            support_generic,
+                        ) {
                             return true;
                         } else {
                             return false;

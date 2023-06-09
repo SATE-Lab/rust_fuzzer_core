@@ -98,14 +98,19 @@ pub(crate) fn _is_generic_type(ty: &clean::Type) -> bool {
 
 /// ok
 /// 是否是终结类型
-pub(crate) fn _is_end_type(ty: &clean::Type, cache: &Cache, full_name_map: &FullNameMap) -> bool {
+pub(crate) fn _is_end_type(
+    ty: &clean::Type,
+    cache: &Cache,
+    full_name_map: &FullNameMap,
+    support_generic: bool,
+) -> bool {
     match ty {
         clean::Type::Path { .. } => {
             //FIXME: need more analyse
             if prelude_type::_prelude_type_need_special_dealing(ty, cache, full_name_map) {
                 let prelude_type = PreludeType::from_type(ty, cache, full_name_map);
                 let final_type = prelude_type._get_final_type();
-                if _is_end_type(&final_type, cache, full_name_map) {
+                if _is_end_type(&final_type, cache, full_name_map, support_generic) {
                     return true;
                 }
             }
@@ -114,14 +119,18 @@ pub(crate) fn _is_end_type(ty: &clean::Type, cache: &Cache, full_name_map: &Full
         clean::Type::Generic(_s) => {
             //println!("generic type = {:?}", s);
             //FIXME: 泛型肯定不是它可以成为结构体
-            false
+            if support_generic {
+                true
+            } else {
+                false
+            }
         }
         clean::Type::Primitive(_) => true,
         clean::Type::BareFunction(_) => false,
         clean::Type::Tuple(inner) => {
             let mut flag = true;
             for inner_type in inner {
-                if !_is_end_type(inner_type, cache, full_name_map) {
+                if !_is_end_type(inner_type, cache, full_name_map, support_generic) {
                     flag = false;
                     break;
                 }
@@ -132,11 +141,11 @@ pub(crate) fn _is_end_type(ty: &clean::Type, cache: &Cache, full_name_map: &Full
         | clean::Type::Array(inner, ..)
         | clean::Type::RawPointer(_, inner) => {
             let inner_type = &**inner;
-            return _is_end_type(inner_type, cache, full_name_map);
+            return _is_end_type(inner_type, cache, full_name_map, support_generic);
         }
         clean::Type::BorrowedRef { type_, .. } => {
             let inner_type = &**type_;
-            return _is_end_type(inner_type, cache, full_name_map);
+            return _is_end_type(inner_type, cache, full_name_map, support_generic);
         }
         clean::Type::QPath(_)
         | clean::Type::Infer
@@ -390,10 +399,10 @@ pub(crate) fn _same_type_hard_mode(
         }
         //泛型
         clean::Type::Generic(_generic) => {
-            //因为在调用之前已经替换过了，所以不应该在这里出现
-            println!("!!!{}", _type_name(output_type, cache, full_name_map));
-            panic!("这里不应该出现！");
-            //CallType::_NotCompatible
+            //因为在调用之前已经替换过了，所以不应该在这里出现，如果出现就是
+            //println!("!!!{}", _type_name(output_type, cache, full_name_map));
+            //panic!("这里不应该出现！");
+            CallType::_NotCompatible
         }
         //基本类型
         //FIXME: 暂不考虑两次转换，如char和任意宽度的数字，但考虑char和u8的转换
@@ -739,11 +748,14 @@ pub(crate) fn _copy_type(type_: &clean::Type) -> bool {
 //目前逻辑有些问题
 //输入类型不是copy_type，并且调用方式是Direct call, Deref ，UnsafeDeref
 pub(crate) fn _move_condition(input_type: &clean::Type, call_type: &CallType) -> bool {
-    if call_type._contains_move_call_type() {
+    /*if call_type._contains_move_call_type() {
         return true;
-    }
+    }*/
     if !_copy_type(input_type) {
-        match call_type {
+        if call_type._contains_move_call_type() {
+            return true;
+        }
+        /*match call_type {
             CallType::_DirectCall
             | CallType::_Deref(..)
             | CallType::_UnsafeDeref(..)
@@ -752,7 +764,7 @@ pub(crate) fn _move_condition(input_type: &clean::Type, call_type: &CallType) ->
                 return true;
             }
             _ => {}
-        }
+        }*/
     }
     return false;
 }

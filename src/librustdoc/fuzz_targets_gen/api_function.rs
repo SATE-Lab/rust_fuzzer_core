@@ -62,27 +62,38 @@ pub(crate) struct ApiFunction {
 
 impl ApiFunction {
     /// 所有参数都是primitive才能是start_function，其中泛型参数虽然我们不打算支持结构体，但是仍然保留生成依赖的可能。
-    pub(crate) fn _is_start_function(&self, cache: &Cache, full_name_map: &FullNameMap) -> bool {
+    pub(crate) fn _is_start_function(
+        &self,
+        cache: &Cache,
+        full_name_map: &FullNameMap,
+        support_generic: bool,
+    ) -> bool {
         let input_types = &self.inputs;
         let mut flag = true;
         for ty in input_types {
-            if !api_util::_is_end_type(&ty, cache, full_name_map) {
+            if !api_util::_is_end_type(&ty, cache, full_name_map, support_generic) {
                 flag = false;
                 break;
             }
         }
+        //println!("name: {}, {}", self._pretty_print(cache, full_name_map), flag);
         flag
     }
 
     /// 返回值不存在或者是primitive类型的函数是终结函数，即返回值是primitive type
-    pub(crate) fn _is_end_function(&self, cache: &Cache, full_name_map: &FullNameMap) -> bool {
+    pub(crate) fn _is_end_function(
+        &self,
+        cache: &Cache,
+        full_name_map: &FullNameMap,
+        support_generic: bool,
+    ) -> bool {
         if self.contains_mut_borrow() {
             return false;
         }
         let return_type = &self.output;
         match return_type {
             Some(ty) => {
-                if api_util::_is_end_type(&ty, cache, full_name_map) {
+                if api_util::_is_end_type(&ty, cache, full_name_map, support_generic) {
                     return true;
                 } else {
                     return false;

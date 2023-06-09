@@ -45,7 +45,7 @@ lazy_static! {
 }
 
 lazy_static! {
-    static ref REAL_WORLD_CRATE_TEST_DIR: FxHashMap<&'static str, String> = {
+    pub static ref REAL_WORLD_CRATE_TEST_DIR: FxHashMap<&'static str, String> = {
         let mut m = FxHashMap::default();
         m.insert("url", generate_fuzz_file_path("url", "real_world_url_afl_work"));
         m.insert("regex", generate_fuzz_file_path("regex", "real_world_regex_afl_work"));
@@ -185,7 +185,7 @@ impl FileHelper {
         let mut sequence_map = FxHashMap::default();
         for seq in chosen_sequences {
             let seq_str = seq.print_sequence(api_graph, true);
-            println!("{}", seq_str);
+            //println!("{}", seq_str);
             sequence_map.insert(seq_str, seq);
         }
         for (seq_str, _seq) in &sequence_map {

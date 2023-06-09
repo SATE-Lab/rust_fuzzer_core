@@ -107,7 +107,23 @@ impl CallType {
     }
 
     pub(crate) fn _contains_move_call_type(&self) -> bool {
-        self._contains_unwrap_call_type()
+        //self._contains_unwrap_call_type()
+        match self {
+            CallType::_NotCompatible | CallType::_DirectCall | CallType::_AsConvert(..) => true,
+            CallType::_UnwrapOption(..) | CallType::_UnwrapResult(..) => true,
+            CallType::_ConstRawPointer(call_type, _)
+            | CallType::_MutRawPointer(call_type, _)
+            | CallType::_UnsafeDeref(call_type)
+            | CallType::_Deref(call_type)
+            | CallType::_ToOption(call_type)
+            | CallType::_ToResult(call_type) => call_type._contains_move_call_type(),
+            CallType::_BorrowedRef(call_type) | CallType::_MutBorrowedRef(call_type) => {
+                match **call_type {
+                    CallType::_DirectCall => false,
+                    _ => call_type._contains_move_call_type(),
+                }
+            }
+        }
     }
 
     pub(crate) fn _is_unwrap_call_type(&self) -> bool {
