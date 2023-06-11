@@ -62,8 +62,17 @@ lazy_static! {
         m.insert("csv", generate_fuzz_file_path("csv", "real_world_afl_work"));
         m.insert("smallvec", generate_fuzz_file_path("smallvec", "real_world_afl_work"));
         m.insert("indexmap", generate_fuzz_file_path("indexmap", "real_world_afl_work"));
+        m.insert(
+            "regex-automata",
+            generate_fuzz_file_path("regex-automata", "real_world_afl_work"),
+        );
+        m.insert("regex-syntax", "/home/yxz/workspace/fuzz/experiment_root/regex-syntax/fuzz_file_dir/real_world_afl_work".to_string());
         m
     };
+}
+
+pub(crate) fn get_real_world_crate_test_dir(lib_name: &str) -> String {
+    generate_fuzz_file_path(lib_name, "real_world_afl_work")
 }
 
 lazy_static! {
@@ -109,17 +118,17 @@ static DEFAULT_RANDOM_FILE_NUMBER: usize = 100;
 pub(crate) fn can_write_to_file(crate_name: &String, strategy: GraphTraverseAlgorithm) -> bool {
     match strategy {
         _Default => DEFAULT_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
-        _Bfs | _UseRealWorld => REAL_WORLD_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
-        _ => false, /*
-                    _Bfs => todo!(),
-                    _FastBfs => todo!(),
-                    _BfsEndPoint => todo!(),
-                    _FastBfsEndPoint => todo!(),
-                    _RandomWalk => todo!(),
-                    _RandomWalkEndPoint => todo!(),
-                    _TryDeepBfs => todo!(),
-                    _DirectBackwardSearch => todo!(),
-                    _UseRealWorld => todo!(),*/
+        _Bfs | _UseRealWorld => true, //REAL_WORLD_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
+        _ => false,                   /*
+                                       _Bfs => todo!(),
+                                       _FastBfs => todo!(),
+                                       _BfsEndPoint => todo!(),
+                                       _FastBfsEndPoint => todo!(),
+                                       _RandomWalk => todo!(),
+                                       _RandomWalkEndPoint => todo!(),
+                                       _TryDeepBfs => todo!(),
+                                       _DirectBackwardSearch => todo!(),
+                                       _UseRealWorld => todo!(),*/
     }
 
     /*if !random_strategy && CRATE_TEST_DIR.contains_key(crate_name.as_str()) {
@@ -150,18 +159,22 @@ pub(crate) struct FileHelper {
 
 impl FileHelper {
     /// 进行初始化工作
-    pub(crate) fn new(api_graph: &ApiGraph<'_>, strategy: GraphTraverseAlgorithm) -> Self {
+    pub(crate) fn new(
+        api_graph: &ApiGraph<'_>,
+        strategy: GraphTraverseAlgorithm,
+        max_len: usize,
+    ) -> Self {
         let crate_name = api_graph._crate_name.clone().replace("_", "-");
 
         //按照不同策略生成在不同的文件夹里
         let test_dir = match strategy {
-            _Default => DEFAULT_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str(),
+            //_Default => DEFAULT_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str(),
             _Bfs | _UseRealWorld => {
-                REAL_WORLD_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str()
+                get_real_world_crate_test_dir(crate_name.as_str())
+                //REAL_WORLD_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str()
             }
-            _ => "",
-        }
-        .to_string();
+            _ => "".to_string(),
+        };
 
         println!("test_dir is [{}]", test_dir);
         let mut sequence_count = 0;
@@ -169,8 +182,12 @@ impl FileHelper {
         let mut reproduce_files = Vec::new();
         let mut libfuzzer_files = Vec::new();
         //let chosen_sequences = api_graph._naive_choose_sequence(MAX_TEST_FILE_NUMBER);
-        let _chosen_sequences = if strategy != _RandomWalk {
-            api_graph._heuristic_choose(MAX_TEST_FILE_NUMBER, true)
+        let _chosen_sequences = if strategy == _UseRealWorld {
+            api_graph.api_sequences.clone()
+            //api_graph._heuristic_choose(max_len, true)
+        } else if strategy == _Bfs {
+            println!("Heuristic_choose");
+            api_graph._heuristic_choose(max_len, true)
         } else {
             let random_size = if RANDOM_TEST_FILE_NUMBERS.contains_key(crate_name.as_str()) {
                 (RANDOM_TEST_FILE_NUMBERS.get(crate_name.as_str()).unwrap()).clone()
@@ -181,9 +198,9 @@ impl FileHelper {
         };
         //println!("chosen sequences number: {}", chosen_sequences.len());
 
-        let chosen_sequences = api_graph.api_sequences.clone();
+        //let chosen_sequences = api_graph.api_sequences.clone();
         let mut sequence_map = FxHashMap::default();
-        for seq in chosen_sequences {
+        for seq in _chosen_sequences {
             let seq_str = seq.print_sequence(api_graph, true);
             //println!("{}", seq_str);
             sequence_map.insert(seq_str, seq);

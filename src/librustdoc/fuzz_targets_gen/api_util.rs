@@ -96,6 +96,59 @@ pub(crate) fn _is_generic_type(ty: &clean::Type) -> bool {
     }
 }
 
+pub(crate) fn _is_immutable_borrow_type(ty: &clean::Type) -> bool {
+    //FIXME: self不需要考虑，因为在产生api function的时候就已经完成转换，但需要考虑类型嵌套的情况
+    match ty {
+        clean::Type::Generic(_) => false,
+        clean::Type::Path { path } => {
+            let segments = &path.segments;
+            for segment in segments {
+                let generic_args = &segment.args;
+                match generic_args {
+                    clean::GenericArgs::AngleBracketed { args, .. } => {
+                        for generic_arg in args.iter() {
+                            if let clean::GenericArg::Type(inner_ty) = generic_arg {
+                                if _is_immutable_borrow_type(&inner_ty) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            return false;
+        }
+        clean::Type::Tuple(types) => {
+            for ty_ in types {
+                if _is_immutable_borrow_type(ty_) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        clean::Type::Slice(type_)
+        | clean::Type::Array(type_, ..)
+        | clean::Type::RawPointer(_, type_) => {
+            let inner_type = &**type_;
+            return _is_immutable_borrow_type(inner_type);
+        }
+        clean::Type::BorrowedRef { type_, mutability, .. } => {
+            if !mutability.is_mut() {
+                return true;
+            }
+            let inner_type = &**type_;
+            return _is_immutable_borrow_type(inner_type);
+        }
+        _ => {
+            //infer, qpath, impltrait不考虑！！！！
+            //FIXME: implTrait是否当作泛型呢？QPath是否当作泛型呢？
+            //如果有不支持的类型，也可以往这个函数里面丢，会在将函数加到图里面的时候最后过滤一遍
+            return false;
+        }
+    }
+}
+
 /// ok
 /// 是否是终结类型
 pub(crate) fn _is_end_type(
@@ -201,10 +254,11 @@ pub(crate) fn _type_name(
         }
         clean::Type::Primitive(primitive_type) => primitive_type.as_sym().to_string(),
         clean::Type::Generic(generic) => generic.to_string(),
-        clean::Type::BorrowedRef { type_, .. } => {
+        clean::Type::BorrowedRef { type_, mutability, .. } => {
             let inner_type = &**type_;
             let inner_name = _type_name(inner_type, cache, full_name_map);
-            format!("&{}", inner_name)
+            let mut_str = if mutability.is_mut() { "mut " } else { "" };
+            format!("&{}{}", mut_str, inner_name)
         }
         clean::Type::Tuple(inner_types) => {
             let inner_types_number = inner_types.len();
@@ -748,9 +802,9 @@ pub(crate) fn _copy_type(type_: &clean::Type) -> bool {
 //目前逻辑有些问题
 //输入类型不是copy_type，并且调用方式是Direct call, Deref ，UnsafeDeref
 pub(crate) fn _move_condition(input_type: &clean::Type, call_type: &CallType) -> bool {
-    /*if call_type._contains_move_call_type() {
+    if call_type._contains_move_call_type() {
         return true;
-    }*/
+    }
     if !_copy_type(input_type) {
         if call_type._contains_move_call_type() {
             return true;
@@ -789,6 +843,7 @@ pub(crate) fn _is_mutable_borrow_occurs(input_type_: &clean::Type, call_type: &C
     if call_type._contains_move_call_type() {
         return false;
     }
+    //println!("不是move callType,我来看看是不是可变引用");
 
     match input_type_ {
         clean::Type::BorrowedRef { mutability, .. } | clean::Type::RawPointer(mutability, _) => {

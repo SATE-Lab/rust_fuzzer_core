@@ -7,6 +7,8 @@ use crate::fuzz_targets_gen::prelude_type;
 use crate::fuzz_targets_gen::replay_util;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 
+use super::prelude_type::PreludeType;
+
 /// ApiCall里面的参数类型，可能是
 /// 1. 其他API的返回值
 /// 2. fuzzable类型
@@ -236,6 +238,8 @@ pub(crate) struct ApiSequence {
     pub(crate) _fuzzable_mut_tag: FxHashSet<usize>, //表示哪些fuzzable的变量需要带上mut标记
     pub(crate) _function_mut_tag: FxHashSet<usize>, //表示哪些function的返回值需要带上mut标记
     pub(crate) _covered_dependencies: FxHashSet<usize>, //表示用到了哪些dependency,即边覆盖率
+
+    pub(crate) careful_pairs: FxHashMap<usize, Vec<usize>>,
 }
 
 impl ApiSequence {
@@ -250,6 +254,7 @@ impl ApiSequence {
         let _fuzzable_mut_tag = FxHashSet::default();
         let _function_mut_tag = FxHashSet::default();
         let _covered_dependencies = FxHashSet::default();
+        let careful_pairs = FxHashMap::default();
         ApiSequence {
             functions,
             fuzzable_params,
@@ -261,6 +266,7 @@ impl ApiSequence {
             _fuzzable_mut_tag,
             _function_mut_tag,
             _covered_dependencies,
+            careful_pairs,
         }
     }
 
@@ -989,6 +995,29 @@ impl ApiSequence {
                 let mut_tag = if self._is_function_need_mut_tag(i) { "mut " } else { "" };
                 res.push_str(format!("let {}{}{} = ", mut_tag, local_param_prefix, i).as_str());
             }
+
+            //对于Result和Option
+            if let Some(output_type) = &api_function.output {
+                if prelude_type::_prelude_type_need_special_dealing(
+                    &output_type,
+                    _api_graph.cache,
+                    &_api_graph.full_name_map,
+                ) {
+                    let prelude_type = PreludeType::from_type(
+                        output_type,
+                        _api_graph.cache,
+                        &_api_graph.full_name_map,
+                    );
+                    if prelude_type.is_option() {
+                        res.push_str("if let Some(x) = ");
+                    } else if prelude_type.is_result() {
+                        res.push_str("if let Ok(x) = ");
+                    }
+                } else {
+                    res.push_str("");
+                }
+            }
+
             let (api_type, function_index) = &api_call.func;
             match api_type {
                 ApiType::BareFunction => {
@@ -1009,7 +1038,22 @@ impl ApiSequence {
                 let param_string = &param_strings[k];
                 res.push_str(param_string.as_str());
             }
-            res.push_str(");\n");
+
+            res.push_str(")");
+            if let Some(output_type) = &api_function.output {
+                //在这里添加，unwrap
+                if prelude_type::_prelude_type_need_special_dealing(
+                    &output_type,
+                    _api_graph.cache,
+                    &_api_graph.full_name_map,
+                ) {
+                    res.push_str("{x} else {use std::process;process::exit(0);};\n");
+                } else {
+                    res.push_str(";\n");
+                }
+            } else {
+                res.push_str(";\n");
+            }
         }
         res
     }

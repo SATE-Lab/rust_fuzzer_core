@@ -4,12 +4,12 @@ use crate::clean::{self, types};
 use crate::formats::cache::Cache;
 use crate::fuzz_targets_gen::api_function::ApiFunction;
 use crate::fuzz_targets_gen::api_sequence::{ApiCall, ApiSequence, ParamType};
-use crate::fuzz_targets_gen::api_util;
+use crate::fuzz_targets_gen::api_util::{self};
 use crate::fuzz_targets_gen::call_type::CallType;
 use crate::fuzz_targets_gen::fuzz_type::FuzzableType;
 use crate::fuzz_targets_gen::impl_util::FullNameMap;
 use crate::fuzz_targets_gen::mod_visibility::ModVisibity;
-use crate::fuzz_targets_gen::prelude_type;
+use crate::fuzz_targets_gen::prelude_type::{self, PreludeType};
 use itertools::Itertools;
 use rand::thread_rng;
 use rand::Rng;
@@ -219,6 +219,13 @@ impl<'a> ApiGraph<'a> {
                     invisible_flag = true;
                     break;
                 }
+                if api_func_name.as_str().ends_with("lossy_normalization")
+                    || api_func_name.as_str().ends_with(":TokenizerBuilder::new")
+                {
+                    invisible_flag = true;
+                    break;
+                }
+
                 if let Some(trait_full_path) = trait_full_path {
                     if trait_full_path.as_str().starts_with(invisible_mod) {
                         invisible_flag = true;
@@ -254,6 +261,23 @@ impl<'a> ApiGraph<'a> {
 
             if let Some(ty_) = &first_fun.output {
                 let mut output_type = ty_.clone();
+
+                //FIXME: 因为很多new或者什么的返回值是Some(T)或者Ok(T)
+                //在这里对unwrap做特殊处理！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
+                //如果output_type是Option或者Result，那么就先提取出来，下面_same_type就减少了unwrap那一步，之后生成的部分就不会多出来一个unwrap
+                //后面在生成function call字符串的时候，特殊考虑一下，如果output_type就直接.unwrap()就好了
+                if prelude_type::_prelude_type_need_special_dealing(
+                    &output_type,
+                    self.cache,
+                    &self.full_name_map,
+                ) {
+                    //如果是option或者result，先转化prelude_type，然后让output变成里面包装的东西
+                    let prelude_type =
+                        PreludeType::from_type(&output_type, self.cache, &self.full_name_map);
+                    output_type = prelude_type._get_final_type();
+                }
+
+                //！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
 
                 for (j, second_fun) in self.api_functions.iter().enumerate() {
                     //FIXME:是否要把i=j的情况去掉？
@@ -956,10 +980,14 @@ impl<'a> ApiGraph<'a> {
             println!("");
         }
 
+        let mut covered_function = FxHashSet::default();
+
         let _function_succ_tables_map = construct_function_succ_table(self, &depinfo);
         let _start_functions = extract_start_function(self, support_generic);
 
         let mut sequences: Vec<ApiSequence> = Vec::new();
+
+        let mut start_index_polling = 0;
 
         //FIXME: 在这里编写逻辑
         loop {
@@ -975,9 +1003,15 @@ impl<'a> ApiGraph<'a> {
 
             //获得随机start函数在全局的index
             let start_idx = _start_functions[rand_num(0, _start_functions.len())];
+            start_index_polling += 1;
+            if start_index_polling >= _start_functions.len() {
+                start_index_polling = 0;
+            }
+
             sequence = match self.is_fun_satisfied(&ApiType::BareFunction, start_idx, &sequence) {
                 Some(seq) => {
                     indexs_in_sequence.push(start_idx);
+                    covered_function.insert(start_idx);
                     seq
                 }
                 None => continue,
@@ -987,18 +1021,19 @@ impl<'a> ApiGraph<'a> {
                 if sequence.len() >= max_len {
                     break;
                 }
-                let rand = rand_num(0, sequence.len() + 5);
+                let rand = rand_num(0, sequence.len() + 8);
                 //println!("rand = {}", rand);
                 if rand == 0 || need_new {
                     //有1/(len+5)的概率接触到new
                     //获得随机start函数在全局的index
                     //println!("选择start");
-                    assert!(start_idx > 0);
+                    assert!(_start_functions.len() > 0);
                     let start_idx = _start_functions[rand_num(0, _start_functions.len())];
                     sequence =
                         match self.is_fun_satisfied(&ApiType::BareFunction, start_idx, &sequence) {
                             Some(seq) => {
                                 indexs_in_sequence.push(start_idx);
+                                covered_function.insert(start_idx);
                                 //加入了new，就可以了
                                 need_new = false;
                                 seq
@@ -1006,35 +1041,7 @@ impl<'a> ApiGraph<'a> {
                             None => continue,
                         };
                 } else {
-                    //println!("选择后继");
-                    //还有 1-l/(1en+5)选到其他
-                    /*
-                    let succ_idxs = _get_succ_indexs(
-                        &sequence,
-                        &indexs_in_sequence,
-                        &_function_succ_tables_map,
-                    );
-                    let mut cnt = 0;
-                    loop {
-                        cnt += 1;
-                        if cnt > succ_idxs.len() {
-                            break;
-                        }
-                        let rand = rand_num(0, succ_idxs.len());
-                        let succ_idx = succ_idxs[rand];
-                        sequence = match self.is_fun_satisfied(
-                            &ApiType::BareFunction,
-                            succ_idx,
-                            &sequence,
-                        ) {
-                            Some(seq) => {
-                                indexs_in_sequence.push(start_idx);
-                                seq
-                            }
-                            None => continue,
-                        };
-                        break;
-                    }*/
+                    //还有 1-l/(1en+3)选到其他
 
                     let available_function_indexs =
                         _get_available_function_indexs(self, &sequence, &_function_succ_tables_map);
@@ -1044,8 +1051,8 @@ impl<'a> ApiGraph<'a> {
                         continue;
                     }
                     //随机找到序列中一个可获得的返回值
-                    let rand_index = rand_num(0, available_function_indexs.len());
-                    let selected_function_index = available_function_indexs[rand_index];
+                    let selected_function_index =
+                        available_function_indexs[rand_num(0, available_function_indexs.len())];
 
                     //找到后继表
                     let selected_succ_table =
@@ -1059,13 +1066,15 @@ impl<'a> ApiGraph<'a> {
                     let mut succ_index = 0;
 
                     for _ in 0..3 {
-                        let select_immutable = _select_immutable_or_not(sequence.len(), max_len);
+                        //let select_immutable = _select_immutable_or_not(sequence.len(), max_len);
                         match _random_select(&normalized_weights) {
                             Some(i) => {
                                 //先存着
                                 succ_index = i;
-
-                                let (_, _, dep) = &selected_succ_table[i];
+                                if covered_function.contains(&selected_succ_table[succ_index].0) {
+                                    continue;
+                                }
+                                /*let (_, _, dep) = &selected_succ_table[i];
                                 let input_func_index = dep.input_fun.1;
                                 let input_api_function = &self.api_functions[input_func_index];
                                 let input_type = &input_api_function.inputs[dep.input_param_index];
@@ -1078,7 +1087,7 @@ impl<'a> ApiGraph<'a> {
                                 } else {
                                     //不行，继续
                                     continue;
-                                }
+                                }*/
                             }
                             None => succ_index = 0,
                         };
@@ -1095,6 +1104,7 @@ impl<'a> ApiGraph<'a> {
                     ) {
                         Some(seq) => {
                             indexs_in_sequence.push(*succ_api_function_index);
+                            covered_function.insert(*succ_api_function_index);
                             seq
                         }
                         None => continue,
@@ -1104,9 +1114,40 @@ impl<'a> ApiGraph<'a> {
 
             sequences.push(sequence);
         }
+        /*
+        for (index, api_function) in self.api_functions.iter().enumerate() {
+            if !covered_function.contains(&index) {
+                let name = api_function._pretty_print(self.cache, &self.full_name_map);
+                let mut reverse_seq =
+                    match self.reverse_construct(&ApiType::BareFunction, index, false) {
+                        Some(x) => {
+                            if x.is_ok(self) {
+                                x
+                            } else {
+                                //println!("函数 {} 出错了，无法生成对应序列", name);
+                                continue;
+                            }
+                        }
+                        None => {
+                            //println!("函数 {} 无法生成对应序列", name);
+                            continue;
+                        }
+                    };
+                println!("成功反向构造{}", name);
+                let api_seq = reverse_seq._generate_api_sequence();
+                covered_function.insert(index);
+                sequences.push(api_seq);
+            }
+        }*/
 
         //最后赋值给graph.api_sequences
         self.api_sequences = sequences;
+
+        println!(
+            "覆盖的API数量: {}, API覆盖率: {}",
+            covered_function.len(),
+            (covered_function.len() as f32) / (self.api_functions.len() as f32)
+        );
 
         /// 归一化函数
         /// 导致每个差距都在20以内        
@@ -1201,6 +1242,9 @@ impl<'a> ApiGraph<'a> {
 
         /// [min, max)
         fn rand_num(min: usize, max: usize) -> usize {
+            if min >= max {
+                return 0;
+            }
             let mut rng = rand::thread_rng();
             let random_number = rng.gen_range(min, max);
 
@@ -1938,11 +1982,11 @@ impl<'a> ApiGraph<'a> {
                             //获取序列中对应函数的api_call
                             let found_function = &new_sequence.functions[function_index];
                             let (api_type, index) = &found_function.func;
-
+                            let index = *index;
                             //如果有依赖关系，才有后面的说法
                             if let Some(dependency_index) = self.check_dependency(
                                 api_type,
-                                *index,
+                                index,
                                 input_fun_type,
                                 input_fun_index,
                                 i,
@@ -1955,9 +1999,23 @@ impl<'a> ApiGraph<'a> {
                                 //找到了依赖，当前参数是可以被满足的，设置flag并退出循环
                                 dependency_flag = true;
 
+                                println!(
+                                    "！！！！！！！！！！！！！！！！！！！！可变借用，{}, {}",
+                                    api_util::_type_name(
+                                        current_ty,
+                                        self.cache,
+                                        &self.full_name_map
+                                    ),
+                                    &dependency_.call_type._to_call_string(
+                                        &"hhhhhh".to_string(),
+                                        self.cache,
+                                        &self.full_name_map
+                                    )
+                                );
+
                                 //如果满足move发生的条件
                                 if api_util::_move_condition(current_ty, &dependency_.call_type) {
-                                    println!(
+                                    /*println!(
                                         "！！！！！！！！！！！！！！！！！！！！移动，{}, {}",
                                         api_util::_type_name(
                                             current_ty,
@@ -1969,7 +2027,7 @@ impl<'a> ApiGraph<'a> {
                                             self.cache,
                                             &self.full_name_map
                                         )
-                                    );
+                                    );*/
                                     if _multi_mut.contains(&function_index)
                                         || _immutable_borrow.contains(&function_index)
                                     {
@@ -1984,7 +2042,7 @@ impl<'a> ApiGraph<'a> {
                                     current_ty,
                                     &dependency_.call_type,
                                 ) {
-                                    println!(
+                                    /*println!(
                                         "！！！！！！！！！！！！！！！！！！！！可变借用，{}, {}",
                                         api_util::_type_name(
                                             current_ty,
@@ -1996,8 +2054,8 @@ impl<'a> ApiGraph<'a> {
                                             self.cache,
                                             &self.full_name_map
                                         )
-                                    );
-
+                                    );*/
+                                    //println!("既然这是 {} 可变引用，我看看有没有符合规则", _type_name(current_ty, self.cache, &self.full_name_map));
                                     //如果在前面的参数已经被借用过了
                                     if _multi_mut.contains(&function_index)
                                         || _immutable_borrow.contains(&function_index)
@@ -2005,6 +2063,22 @@ impl<'a> ApiGraph<'a> {
                                         dependency_flag = false;
                                         continue;
                                     } else {
+                                        //如果遇到了前面记录的要被可变借用，就相当于move了
+                                        if new_sequence.careful_pairs.contains_key(&function_index)
+                                        {
+                                            let movables = &*(new_sequence
+                                                .careful_pairs
+                                                .get(&function_index)
+                                                .unwrap());
+                                            for movable in movables {
+                                                /*println!("我是{}, 在这里我可变引用了{}的返回值，但是前面被{}不可变借用了, move掉",
+                                                &self.api_functions[input_fun_index]._pretty_print(self.cache, &self.full_name_map),
+                                                &self.api_functions[index]._pretty_print(self.cache, &self.full_name_map),
+                                                &self.api_functions[new_sequence.functions[*movable].func.1]._pretty_print(self.cache, &self.full_name_map));*/
+                                                _moved_indexes.insert(*movable);
+                                            }
+                                        }
+
                                         _multi_mut.insert(function_index);
                                         //global_mut_borrow.insert(function_index);
                                     }
@@ -2014,21 +2088,45 @@ impl<'a> ApiGraph<'a> {
                                     current_ty,
                                     &dependency_.call_type,
                                 ) {
-                                    println!(
-                                        "！！！！！！！！！！！！！！！！！！！！不可变借用，{}, {}",
-                                        api_util::_type_name(
-                                            current_ty,
-                                            self.cache,
-                                            &self.full_name_map
-                                        ),
-                                        &dependency_.call_type._to_call_string(&"hhhhhh".to_string(), self.cache, &self.full_name_map)
-                                    );
-
                                     //如果前面的参数已经被可变借用了
                                     if _multi_mut.contains(&function_index) {
                                         dependency_flag = false;
                                         continue;
                                     } else {
+                                        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                                        if !self.api_functions[input_fun_index]._has_no_output() {
+                                            //println!("有输出");
+                                            //如果，func2返回值是不可变引用
+                                            if api_util::_is_immutable_borrow_type(
+                                                &self.api_functions[input_fun_index]
+                                                    .clone()
+                                                    .output
+                                                    .unwrap(),
+                                            ) && !api_util::_is_immutable_borrow_type(
+                                                &self.api_functions[index].clone().output.unwrap(),
+                                            ) {
+                                                println!("我的 {} 函数返回值是不可变引用，同时我不可变借用了 {} 函数",&self.api_functions[input_fun_index]._pretty_print(self.cache, &self.full_name_map), &self.api_functions[index]._pretty_print(self.cache, &self.full_name_map));
+                                                //插入func1和func2
+
+                                                let cur_index = new_sequence.len();
+                                                if new_sequence
+                                                    .careful_pairs
+                                                    .contains_key(&function_index)
+                                                {
+                                                    new_sequence
+                                                        .careful_pairs
+                                                        .get_mut(&function_index)
+                                                        .unwrap()
+                                                        .push(cur_index);
+                                                } else {
+                                                    new_sequence
+                                                        .careful_pairs
+                                                        .insert(function_index, vec![cur_index]);
+                                                }
+                                            }
+                                        }
+                                        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
                                         _immutable_borrow.insert(function_index);
                                         //global_borrow.insert(function_index);
                                     }
@@ -2073,195 +2171,6 @@ impl<'a> ApiGraph<'a> {
         }
     }
 
-    /*
-    //OK: 判断一个函数能否加入给定的序列中,如果可以加入，返回Some(new_sequence),new_sequence是将新的调用加进去之后的情况，否则返回None
-    pub(crate) fn is_fun_satisfied(
-        &self,
-        input_type: &ApiType,
-        input_fun_index: usize,
-        sequence: &ApiSequence,
-    ) -> Option<ApiSequence> {
-        //判断一个给定的函数能否加入到一个sequence中去
-        match input_type {
-            ApiType::BareFunction => {
-                let mut new_sequence = sequence.clone();
-                let mut api_call = ApiCall::_new(input_fun_index);
-
-                let mut _moved_indexes = FxHashSet::default(); //用来保存发生move的那些语句的index
-                let mut _multi_mut = FxHashSet::default(); //用来保存会被多次可变引用的情况
-                let mut _immutable_borrow = FxHashSet::default(); //不可变借用
-
-                //函数
-                let input_function = &self.api_functions[input_fun_index];
-
-                //如果是个unsafe函数，给sequence添加unsafe标记
-                if input_function._unsafe_tag._is_unsafe() {
-                    new_sequence.set_unsafe();
-                }
-                //如果用到了trait，添加到序列的trait列表
-                if input_function._trait_full_path.is_some() {
-                    let trait_full_path = input_function._trait_full_path.as_ref().unwrap();
-                    new_sequence.add_trait(trait_full_path);
-                }
-
-                //看看之前序列的返回值是否可以作为它的参数
-                let input_params = &input_function.inputs;
-                if input_params.is_empty() {
-                    //无需输入参数，直接是可满足的
-                    new_sequence._add_fn(api_call);
-                    return Some(new_sequence);
-                }
-                //对于每个参数进行遍历
-                for (i, current_ty) in input_params.iter().enumerate() {
-                    if api_util::is_fuzzable_type(
-                        current_ty,
-                        self.cache,
-                        &self.full_name_map,
-                        Some(&input_function.generic_substitutions),
-                    ) {
-                        //如果当前参数是fuzzable的
-                        let current_fuzzable_index = new_sequence.fuzzable_params.len();
-                        let fuzzable_call_type = fuzz_type::fuzzable_call_type(
-                            current_ty,
-                            self.cache,
-                            &self.full_name_map,
-                            Some(&input_function.generic_substitutions),
-                        );
-                        let (fuzzable_type, call_type) =
-                            fuzzable_call_type.generate_fuzzable_type_and_call_type();
-
-                        //如果出现了下面这段话，说明出现了Fuzzable参数但不知道如何参数化的
-                        //典型例子是tuple里面出现了引用（&usize），这种情况不再去寻找dependency，直接返回无法添加即可
-                        match &fuzzable_type {
-                            FuzzableType::NoFuzzable => {
-                                //println!("Fuzzable Type Error Occurs!");
-                                //println!("type = {:?}", current_ty);
-                                //println!("fuzzable_call_type = {:?}", fuzzable_call_type);
-                                //println!("fuzzable_type = {:?}", fuzzable_type);
-                                return None;
-                            }
-                            _ => {}
-                        }
-
-                        //判断要不要加mut tag
-                        if api_util::_need_mut_tag(&call_type) {
-                            new_sequence._insert_fuzzable_mut_tag(current_fuzzable_index);
-                        }
-
-                        //添加到sequence中去
-                        new_sequence.fuzzable_params.push(fuzzable_type);
-                        api_call._add_param(
-                            ParamType::_FuzzableType,
-                            current_fuzzable_index,
-                            call_type,
-                        );
-                    } else {
-                        // 如果当前参数不是fuzzable的，那么就去api sequence寻找是否有这个依赖
-                        // 也就是说，api sequence里是否有某个api的返回值是它的参数
-
-                        //FIXME: 处理move的情况
-                        let functions_in_sequence_len = sequence.functions.len();
-                        let mut dependency_flag = false;
-
-                        for function_index in 0..functions_in_sequence_len {
-                            // 如果这个sequence里面的该函数返回值已经被move掉了，那么就跳过，不再能被使用了
-                            // 后面的都是默认这个返回值没有被move，而是被可变借用或不可变借用
-                            if new_sequence._is_moved(function_index)
-                                || _moved_indexes.contains(&function_index)
-                            {
-                                continue;
-                            }
-
-                            let found_function = &new_sequence.functions[function_index];
-                            let (api_type, index) = &found_function.func;
-                            if let Some(dependency_index) = self.check_dependency(
-                                api_type,
-                                *index,
-                                input_type,
-                                input_fun_index,
-                                i,
-                            ) {
-                                let dependency_ = self.api_dependencies[dependency_index].clone();
-                                //将覆盖到的边加入到新的sequence中去
-                                new_sequence._add_dependency(dependency_index);
-                                //找到了依赖，当前参数是可以被满足的，设置flag并退出循环
-                                dependency_flag = true;
-
-                                //如果满足move发生的条件
-                                if api_util::_move_condition(current_ty, &dependency_.call_type) {
-                                    if _multi_mut.contains(&function_index)
-                                        || _immutable_borrow.contains(&function_index)
-                                    {
-                                        dependency_flag = false;
-                                        continue;
-                                    } else {
-                                        _moved_indexes.insert(function_index);
-                                    }
-                                }
-                                //如果当前调用是可变借用
-                                if api_util::_is_mutable_borrow_occurs(
-                                    current_ty,
-                                    &dependency_.call_type,
-                                ) {
-                                    //如果之前已经被借用过了
-                                    if _multi_mut.contains(&function_index)
-                                        || _immutable_borrow.contains(&function_index)
-                                    {
-                                        dependency_flag = false;
-                                        continue;
-                                    } else {
-                                        _multi_mut.insert(function_index);
-                                    }
-                                }
-                                //如果当前调用是引用，且之前已经被可变引用过，那么这个引用是非法的
-                                if api_util::_is_immutable_borrow_occurs(
-                                    current_ty,
-                                    &dependency_.call_type,
-                                ) {
-                                    if _multi_mut.contains(&function_index) {
-                                        dependency_flag = false;
-                                        continue;
-                                    } else {
-                                        _immutable_borrow.insert(function_index);
-                                    }
-                                }
-                                //参数需要加mut 标记的话
-                                if api_util::_need_mut_tag(&dependency_.call_type) {
-                                    new_sequence._insert_function_mut_tag(function_index);
-                                }
-                                //如果call type是unsafe的，那么给sequence加上unsafe标记
-                                if dependency_.call_type.unsafe_call_type()._is_unsafe() {
-                                    new_sequence.set_unsafe();
-                                }
-                                api_call._add_param(
-                                    ParamType::_FunctionReturn,
-                                    function_index,
-                                    dependency_.call_type,
-                                );
-                                break;
-                            }
-                        }
-                        if !dependency_flag {
-                            //如果这个参数没有寻找到依赖，则这个函数不可以被加入到序列中
-                            return None;
-                        }
-                    }
-                }
-                //所有参数都可以找到依赖，那么这个函数就可以加入序列
-                new_sequence._add_fn(api_call);
-                for move_index in _moved_indexes {
-                    new_sequence._insert_move_index(move_index);
-                }
-                if new_sequence._contains_multi_dynamic_length_fuzzable() {
-                    //如果新生成的序列包含多维可变的参数，就不把这个序列加进去
-                    return None;
-                }
-                return Some(new_sequence);
-            }
-            ApiType::GenericFunction => todo!(),
-        }
-    }*/
-
     /// 从后往前推，做一个dfs
     pub(crate) fn reverse_construct(
         &self,
@@ -2287,8 +2196,9 @@ impl<'a> ApiGraph<'a> {
                 let (_, input_fun_index) = api_call.func;
                 let input_fun = &self.api_functions[input_fun_index];
                 let params = &input_fun.inputs;
-
-                println!("name: {}", input_fun.full_name);
+                if print {
+                    println!("name: {}", input_fun.full_name);
+                }
                 sleep(Duration::from_millis(20));
 
                 //对于当前函数的param，有依赖
@@ -2398,17 +2308,21 @@ impl<'a> ApiGraph<'a> {
                                 );
                                 current_param_index += param_seq.functions.len();
 
-                                println!(
-                                    "找到了依赖，{}的返回值给{}",
-                                    self.api_functions[output_fun_index].full_name,
-                                    self.api_functions[input_fun_index].full_name
-                                );
+                                if print {
+                                    println!(
+                                        "找到了依赖，{}的返回值给{}",
+                                        self.api_functions[output_fun_index].full_name,
+                                        self.api_functions[input_fun_index].full_name
+                                    );
+                                }
                                 break;
                             }
                         }
                         //如果所有函数都无法作为当前函数的前驱。。。
                         if !dependency_flag {
-                            println!("所有函数都无法作为当前函数的前驱");
+                            if print {
+                                println!("所有函数都无法作为当前函数的前驱");
+                            }
                             return None;
                         }
                     }

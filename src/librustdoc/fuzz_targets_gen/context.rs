@@ -39,6 +39,8 @@ lazy_static! {
         m.insert("csv");
         m.insert("smallvec");
         m.insert("indexmap");
+        m.insert("regex_automata");
+        m.insert("regex_syntax");
         let m = m.into_iter().map(|x| x.to_string()).collect();
         m
     };
@@ -148,6 +150,7 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             );
             let kname = krate.name(tcx).to_string();
             println!("正在解析: {}", kname);
+
             if !REAL_WORLD_CRATE.contains(&kname) {
                 println!("待测库没有这个crate");
                 return Ok((cx, krate));
@@ -183,13 +186,16 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 krate.name(tcx).as_str().replace("_", "-").as_str(),
             );
             */
+            let max_num = 40;
+            let max_len = 25;
 
+            //let generation_strategy = _Bfs;
             let generation_strategy = _UseRealWorld;
             api_graph.generate_all_possoble_sequences(
                 generation_strategy,
                 krate.name(tcx).as_str().replace("_", "-").as_str(),
-                20,
-                20,
+                max_num,
+                max_len,
                 support_generic,
             );
 
@@ -202,7 +208,8 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
             ) {
                 println!("I will write test case into files");
                 //whether to use random strategy
-                let file_helper = file_util::FileHelper::new(&api_graph, generation_strategy);
+                let file_helper =
+                    file_util::FileHelper::new(&api_graph, generation_strategy, max_num);
                 //println!("file_helper:{:?}", file_helper);
                 file_helper.write_files();
 
