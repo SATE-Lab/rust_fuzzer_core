@@ -1150,7 +1150,7 @@ impl<'a> ApiGraph<'a> {
         );
 
         /// 归一化函数
-        /// 导致每个差距都在20以内        
+        /// 导致每个差距都在20以内
         #[allow(dead_code)]
         fn normalize_weights(weights: &Vec<usize>) -> Vec<f32> {
             // 使用对数函数进行调整
