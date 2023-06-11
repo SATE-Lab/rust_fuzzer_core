@@ -2105,7 +2105,18 @@ impl<'a> ApiGraph<'a> {
                                             ) && !api_util::_is_immutable_borrow_type(
                                                 &self.api_functions[index].clone().output.unwrap(),
                                             ) {
-                                                println!("我的 {} 函数返回值是不可变引用，同时我不可变借用了 {} 函数",&self.api_functions[input_fun_index]._pretty_print(self.cache, &self.full_name_map), &self.api_functions[index]._pretty_print(self.cache, &self.full_name_map));
+                                                println!(
+                                                    "我的 {} 函数返回值是不可变引用，同时我不可变借用了 {} 函数",
+                                                    &self.api_functions[input_fun_index]
+                                                        ._pretty_print(
+                                                            self.cache,
+                                                            &self.full_name_map
+                                                        ),
+                                                    &self.api_functions[index]._pretty_print(
+                                                        self.cache,
+                                                        &self.full_name_map
+                                                    )
+                                                );
                                                 //插入func1和func2
 
                                                 let cur_index = new_sequence.len();

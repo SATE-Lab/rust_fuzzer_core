@@ -225,11 +225,7 @@ pub(crate) fn _prelude_type_need_special_dealing(
 ) -> bool {
     let prelude_type = PreludeType::from_type(type_, cache, full_name_map);
     let final_type = prelude_type._get_final_type();
-    if final_type == *type_ {
-        false
-    } else {
-        true
-    }
+    if final_type == *type_ { false } else { true }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
