@@ -393,7 +393,11 @@ impl ApiSequence {
     }
     //判断序列里的index函数返回值是否被move
     pub(crate) fn _is_moved(&self, index: usize) -> bool {
-        if self._moved.contains(&index) { true } else { false }
+        if self._moved.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
     //插入move
     pub(crate) fn _insert_move_index(&mut self, index: usize) {
@@ -409,7 +413,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_fuzzable_need_mut_tag(&self, index: usize) -> bool {
-        if self._fuzzable_mut_tag.contains(&index) { true } else { false }
+        if self._fuzzable_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn _insert_function_mut_tag(&mut self, index: usize) {
@@ -417,7 +425,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_function_need_mut_tag(&self, index: usize) -> bool {
-        if self._function_mut_tag.contains(&index) { true } else { false }
+        if self._function_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn set_unsafe(&mut self) {
@@ -490,7 +502,7 @@ impl ApiSequence {
                 }
             }
         }
-
+        /*
         for api_call_index in 0..api_call_num {
             if !dead_api_call[api_call_index] {
                 continue;
@@ -519,7 +531,7 @@ impl ApiSequence {
                     }
                 }
             }
-        }
+        }*/
 
         dead_api_call
     }
@@ -586,14 +598,14 @@ impl ApiSequence {
     ) -> String {
         let mut res = String::new();
         //加入可能需要开启的feature gate
-        let feature_gates = afl_util::_get_feature_gates_of_sequence(&self.fuzzable_params);
+        /*let feature_gates = afl_util::_get_feature_gates_of_sequence(&self.fuzzable_params);
 
         if feature_gates.is_some() {
             for feature_gate in &feature_gates.unwrap() {
                 let feature_gate_line = format!("{feature_gate}\n", feature_gate = feature_gate);
                 res.push_str(feature_gate_line.as_str());
             }
-        }
+        }*/
 
         res.push_str("#[macro_use]\n");
         res.push_str("extern crate afl;\n");
@@ -990,7 +1002,8 @@ impl ApiSequence {
                     &output_type,
                     _api_graph.cache,
                     &_api_graph.full_name_map,
-                ) {
+                ) && !dead_code[i]
+                {
                     let prelude_type = PreludeType::from_type(
                         output_type,
                         _api_graph.cache,
@@ -1034,7 +1047,8 @@ impl ApiSequence {
                     &output_type,
                     _api_graph.cache,
                     &_api_graph.full_name_map,
-                ) {
+                ) && !dead_code[i]
+                {
                     res.push_str("{x} else {use std::process;process::exit(0);};\n");
                 } else {
                     res.push_str(";\n");

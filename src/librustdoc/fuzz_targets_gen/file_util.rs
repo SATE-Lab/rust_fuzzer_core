@@ -67,6 +67,10 @@ lazy_static! {
             generate_fuzz_file_path("regex-automata", "real_world_afl_work"),
         );
         m.insert("regex-syntax", "/home/yxz/workspace/fuzz/experiment_root/regex-syntax/fuzz_file_dir/real_world_afl_work".to_string());
+        m.insert("hyper", generate_fuzz_file_path("hyper", "real_world_afl_work"));
+        m.insert("http", generate_fuzz_file_path("http", "real_world_afl_work"));
+        m.insert("ratatui", generate_fuzz_file_path("ratatui", "real_world_afl_work"));
+        m.insert("hifitime", generate_fuzz_file_path("hifitime", "real_world_afl_work"));
         m
     };
 }

@@ -335,6 +335,32 @@ impl<'a> ApiGraph<'a> {
                                     continue;
                                 }
                             };
+                        } else {
+                            println!(
+                                "找：{}",
+                                api_util::_type_name(&output_type, self.cache, &self.full_name_map)
+                            );
+                            if (!prelude_type::_prelude_type_need_special_dealing(
+                                &output_type,
+                                self.cache,
+                                &self.full_name_map,
+                            ) && api_util::_is_generic_type(&output_type))
+                                || (!prelude_type::_prelude_type_need_special_dealing(
+                                    &input_type,
+                                    self.cache,
+                                    &self.full_name_map,
+                                ) && api_util::_is_generic_type(&input_type))
+                            {
+                                println!(
+                                    "找到了泛型，不支持：{}",
+                                    api_util::_type_name(
+                                        &output_type,
+                                        self.cache,
+                                        &self.full_name_map
+                                    )
+                                );
+                                continue;
+                            }
                         }
                         /*println!(
                             "替换后output: {}",
@@ -1002,16 +1028,23 @@ impl<'a> ApiGraph<'a> {
             let mut need_new: bool = false;
 
             //获得随机start函数在全局的index
-            let start_idx = _start_functions[rand_num(0, _start_functions.len())];
+            //let start_idx = _start_functions[rand_num(0, _start_functions.len())];
             start_index_polling += 1;
             if start_index_polling >= _start_functions.len() {
                 start_index_polling = 0;
             }
 
-            sequence = match self.is_fun_satisfied(&ApiType::BareFunction, start_idx, &sequence) {
+            let start_function_index = _start_functions[start_index_polling];
+
+            sequence = match self.is_fun_satisfied(
+                &ApiType::BareFunction,
+                start_function_index,
+                &sequence,
+            ) {
                 Some(seq) => {
-                    indexs_in_sequence.push(start_idx);
-                    covered_function.insert(start_idx);
+                    println!("start_polling_index = {}", start_index_polling);
+                    indexs_in_sequence.push(start_function_index);
+                    covered_function.insert(start_function_index);
                     seq
                 }
                 None => continue,
@@ -1021,7 +1054,7 @@ impl<'a> ApiGraph<'a> {
                 if sequence.len() >= max_len {
                     break;
                 }
-                let rand = rand_num(0, sequence.len() + 8);
+                let rand = rand_num(0, sequence.len() + 3);
                 //println!("rand = {}", rand);
                 if rand == 0 || need_new {
                     //有1/(len+5)的概率接触到new
@@ -1999,7 +2032,7 @@ impl<'a> ApiGraph<'a> {
                                 //找到了依赖，当前参数是可以被满足的，设置flag并退出循环
                                 dependency_flag = true;
 
-                                println!(
+                                /*println!(
                                     "！！！！！！！！！！！！！！！！！！！！可变借用，{}, {}",
                                     api_util::_type_name(
                                         current_ty,
@@ -2011,7 +2044,7 @@ impl<'a> ApiGraph<'a> {
                                         self.cache,
                                         &self.full_name_map
                                     )
-                                );
+                                );*/
 
                                 //如果满足move发生的条件
                                 if api_util::_move_condition(current_ty, &dependency_.call_type) {
@@ -2034,6 +2067,21 @@ impl<'a> ApiGraph<'a> {
                                         dependency_flag = false;
                                         continue;
                                     } else {
+                                        //如果遇到了前面记录的要被可变借用，就相当于move了
+                                        if new_sequence.careful_pairs.contains_key(&function_index)
+                                        {
+                                            let movables = &*(new_sequence
+                                                .careful_pairs
+                                                .get(&function_index)
+                                                .unwrap());
+                                            for movable in movables {
+                                                /*println!("我是{}, 在这里我可变引用了{}的返回值，但是前面被{}不可变借用了, move掉",
+                                                &self.api_functions[input_fun_index]._pretty_print(self.cache, &self.full_name_map),
+                                                &self.api_functions[index]._pretty_print(self.cache, &self.full_name_map),
+                                                &self.api_functions[new_sequence.functions[*movable].func.1]._pretty_print(self.cache, &self.full_name_map));*/
+                                                _moved_indexes.insert(*movable);
+                                            }
+                                        }
                                         _moved_indexes.insert(function_index);
                                     }
                                 }

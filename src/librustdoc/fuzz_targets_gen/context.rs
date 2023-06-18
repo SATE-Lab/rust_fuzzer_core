@@ -41,6 +41,10 @@ lazy_static! {
         m.insert("indexmap");
         m.insert("regex_automata");
         m.insert("regex_syntax");
+        m.insert("hyper");
+        m.insert("http");
+        m.insert("ratatui");
+        m.insert("hifitime");
         let m = m.into_iter().map(|x| x.to_string()).collect();
         m
     };
