@@ -393,11 +393,7 @@ impl ApiSequence {
     }
     //判断序列里的index函数返回值是否被move
     pub(crate) fn _is_moved(&self, index: usize) -> bool {
-        if self._moved.contains(&index) {
-            true
-        } else {
-            false
-        }
+        if self._moved.contains(&index) { true } else { false }
     }
     //插入move
     pub(crate) fn _insert_move_index(&mut self, index: usize) {
@@ -413,11 +409,7 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_fuzzable_need_mut_tag(&self, index: usize) -> bool {
-        if self._fuzzable_mut_tag.contains(&index) {
-            true
-        } else {
-            false
-        }
+        if self._fuzzable_mut_tag.contains(&index) { true } else { false }
     }
 
     pub(crate) fn _insert_function_mut_tag(&mut self, index: usize) {
@@ -425,11 +417,7 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_function_need_mut_tag(&self, index: usize) -> bool {
-        if self._function_mut_tag.contains(&index) {
-            true
-        } else {
-            false
-        }
+        if self._function_mut_tag.contains(&index) { true } else { false }
     }
 
     pub(crate) fn set_unsafe(&mut self) {

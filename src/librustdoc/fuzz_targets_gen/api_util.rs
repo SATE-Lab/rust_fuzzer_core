@@ -174,11 +174,7 @@ pub(crate) fn _is_end_type(
         clean::Type::Generic(_s) => {
             //println!("generic type = {:?}", s);
             //FIXME: 泛型肯定不是它可以成为结构体
-            if support_generic {
-                true
-            } else {
-                false
-            }
+            if support_generic { true } else { false }
         }
         clean::Type::Primitive(_) => true,
         clean::Type::BareFunction(_) => false,
