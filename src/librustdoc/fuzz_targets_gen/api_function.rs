@@ -136,7 +136,7 @@ impl ApiFunction {
 
     //FIXME:  判断一个函数是否是泛型函数
     pub(crate) fn _is_generic_function(&self) -> bool {
-        let input_types = &self.inputs;
+        /*let input_types = &self.inputs;
         for ty in input_types {
             if api_util::_is_generic_type(&ty) {
                 return true;
@@ -145,6 +145,12 @@ impl ApiFunction {
         let output_type = &self.output;
         if let Some(ty) = output_type {
             if api_util::_is_generic_type(&ty) {
+                return true;
+            }
+        }
+        return false;*/
+        for param in &self._generics.params {
+            if param.kind.is_type() {
                 return true;
             }
         }

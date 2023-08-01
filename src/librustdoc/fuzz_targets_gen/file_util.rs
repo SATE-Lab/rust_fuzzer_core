@@ -48,7 +48,7 @@ lazy_static! {
     pub static ref REAL_WORLD_CRATE_TEST_DIR: FxHashMap<&'static str, String> = {
         let mut m = FxHashMap::default();
         m.insert("url", generate_fuzz_file_path("url", "real_world_url_afl_work"));
-        m.insert("regex", generate_fuzz_file_path("regex", "real_world_regex_afl_work"));
+        m.insert("regex", generate_fuzz_file_path("regex", "real_world_afl_work"));
         m.insert("tui", generate_fuzz_file_path("tui", "real_world_tui_afl_work"));
         m.insert("time", generate_fuzz_file_path("time", "real_world_time_afl_work"));
         m.insert("clap", generate_fuzz_file_path("clap", "real_world_clap_afl_work"));
@@ -71,12 +71,25 @@ lazy_static! {
         m.insert("http", generate_fuzz_file_path("http", "real_world_afl_work"));
         m.insert("ratatui", generate_fuzz_file_path("ratatui", "real_world_afl_work"));
         m.insert("hifitime", generate_fuzz_file_path("hifitime", "real_world_afl_work"));
+        m.insert("serde_json", generate_fuzz_file_path("serde_json", "real_world_afl_work"));
+        m.insert("ryu", generate_fuzz_file_path("ryu", "real_world_afl_work"));
         m
     };
 }
 
 pub(crate) fn get_real_world_crate_test_dir(lib_name: &str) -> String {
     generate_fuzz_file_path(lib_name, "real_world_afl_work")
+}
+pub(crate) fn _get_bfs_crate_test_dir(lib_name: &str) -> String {
+    generate_fuzz_file_path(lib_name, "bfs_afl_work")
+}
+
+pub(crate) fn get_fudge_crate_test_dir(lib_name: &str) -> String {
+    generate_fuzz_file_path(lib_name, "fudge_afl_work")
+}
+
+pub(crate) fn get_randwalk_crate_test_dir(lib_name: &str) -> String {
+    generate_fuzz_file_path(lib_name, "random_afl_work")
 }
 
 lazy_static! {
@@ -117,22 +130,22 @@ static _AFL_DIR: &'static str = "afl_files";
 static _REPRODUCE_FILE_DIR: &'static str = "replay_files";
 static _LIBFUZZER_DIR: &'static str = "libfuzzer_files";
 static MAX_TEST_FILE_NUMBER: usize = 300;
-static DEFAULT_RANDOM_FILE_NUMBER: usize = 100;
+//static DEFAULT_RANDOM_FILE_NUMBER: usize = 100;
 
 pub(crate) fn can_write_to_file(crate_name: &String, strategy: GraphTraverseAlgorithm) -> bool {
     match strategy {
         _Default => DEFAULT_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
-        _Bfs | _UseRealWorld => true, //REAL_WORLD_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
-        _ => false,                   /*
-                                       _Bfs => todo!(),
-                                       _FastBfs => todo!(),
-                                       _BfsEndPoint => todo!(),
-                                       _FastBfsEndPoint => todo!(),
-                                       _RandomWalk => todo!(),
-                                       _RandomWalkEndPoint => todo!(),
-                                       _TryDeepBfs => todo!(),
-                                       _DirectBackwardSearch => todo!(),
-                                       _UseRealWorld => todo!(),*/
+        _RandomWalk | _Fudge | _UseRealWorld => true, //REAL_WORLD_CRATE_TEST_DIR.contains_key(crate_name.as_str()),
+        _ => false,                                   /*
+                                                       _Bfs => todo!(),
+                                                       _FastBfs => todo!(),
+                                                       _BfsEndPoint => todo!(),
+                                                       _FastBfsEndPoint => todo!(),
+                                                       _RandomWalk => todo!(),
+                                                       _RandomWalkEndPoint => todo!(),
+                                                       _TryDeepBfs => todo!(),
+                                                       _DirectBackwardSearch => todo!(),
+                                                       _UseRealWorld => todo!(),*/
     }
 
     /*if !random_strategy && CRATE_TEST_DIR.contains_key(crate_name.as_str()) {
@@ -143,14 +156,14 @@ pub(crate) fn can_write_to_file(crate_name: &String, strategy: GraphTraverseAlgo
     }*/
     //return false;
 }
-
+/*
 pub(crate) fn can_generate_libfuzzer_target(crate_name: &String) -> bool {
     if LIBFUZZER_FUZZ_TARGET_DIR.contains_key(crate_name.as_str()) {
         return true;
     } else {
         return false;
     }
-}
+}*/
 
 #[derive(Debug, Clone)]
 pub(crate) struct FileHelper {
@@ -158,7 +171,7 @@ pub(crate) struct FileHelper {
     pub(crate) test_dir: String,
     pub(crate) test_files: Vec<String>,
     pub(crate) reproduce_files: Vec<String>,
-    pub(crate) libfuzzer_files: Vec<String>,
+    //pub(crate) libfuzzer_files: Vec<String>,
 }
 
 impl FileHelper {
@@ -166,6 +179,7 @@ impl FileHelper {
     pub(crate) fn new(
         api_graph: &ApiGraph<'_>,
         strategy: GraphTraverseAlgorithm,
+        max_size: usize,
         max_len: usize,
     ) -> Self {
         let crate_name = api_graph._crate_name.clone().replace("_", "-");
@@ -173,10 +187,13 @@ impl FileHelper {
         //按照不同策略生成在不同的文件夹里
         let test_dir = match strategy {
             //_Default => DEFAULT_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str(),
-            _Bfs | _UseRealWorld => {
+            _UseRealWorld => {
                 get_real_world_crate_test_dir(crate_name.as_str())
                 //REAL_WORLD_CRATE_TEST_DIR.get(crate_name.as_str()).unwrap().as_str()
             }
+            //_Bfs => get_bfs_crate_test_dir(crate_name.as_str()),
+            _RandomWalk => get_randwalk_crate_test_dir(crate_name.as_str()),
+            _Fudge => get_fudge_crate_test_dir(crate_name.as_str()),
             _ => "".to_string(),
         };
 
@@ -186,34 +203,30 @@ impl FileHelper {
         let mut reproduce_files = Vec::new();
         let mut libfuzzer_files = Vec::new();
         //let chosen_sequences = api_graph._naive_choose_sequence(MAX_TEST_FILE_NUMBER);
-        let _chosen_sequences = if strategy == _UseRealWorld {
-            api_graph.api_sequences.clone()
+        let _chosen_sequences = if strategy == _Fudge {
+            //api_graph.api_sequences.clone()
+            println!("sequences {}", api_graph.api_sequences.len());
+            //api_graph._heuristic_choose(10, true)
+            api_graph._first_choose(max_size, max_len)
+        } else if strategy == _UseRealWorld {
+            //api_graph.api_sequences.clone()
             //api_graph._heuristic_choose(max_len, true)
+            api_graph._first_choose(max_size, max_len)
         } else if strategy == _Bfs {
             println!("Heuristic_choose");
-            api_graph._heuristic_choose(max_len, true)
+            api_graph._heuristic_choose(max_size, true)
         } else {
-            let random_size = if RANDOM_TEST_FILE_NUMBERS.contains_key(crate_name.as_str()) {
-                (RANDOM_TEST_FILE_NUMBERS.get(crate_name.as_str()).unwrap()).clone()
-            } else {
-                DEFAULT_RANDOM_FILE_NUMBER
-            };
-            api_graph._first_choose(random_size)
+            api_graph._first_choose(max_size, max_len)
         };
-        //println!("chosen sequences number: {}", chosen_sequences.len());
 
-        //let chosen_sequences = api_graph.api_sequences.clone();
         let mut sequence_map = FxHashMap::default();
         for seq in _chosen_sequences {
             let seq_str = seq.print_sequence(api_graph, true);
             //println!("{}", seq_str);
             sequence_map.insert(seq_str, seq);
         }
-        for (seq_str, _seq) in &sequence_map {
-            println!("This is in refined sequences: {}", seq_str);
-        }
 
-        println!("refined sequences contains {} sequences", sequence_map.len());
+        println!("去重之后的序列集合包含 {} 个序列", sequence_map.len());
         let mut chosen_sequences = sequence_map.iter().collect_vec();
         chosen_sequences.sort_by(|(x, _), (y, _)| x.cmp(y));
         let chosen_sequences = chosen_sequences.iter().map(|(_s, seq)| seq.clone()).collect_vec();
@@ -230,7 +243,7 @@ impl FileHelper {
             libfuzzer_files.push(libfuzzer_file);
             sequence_count = sequence_count + 1;
         }
-        FileHelper { crate_name, test_dir, test_files, reproduce_files, libfuzzer_files }
+        FileHelper { crate_name, test_dir, test_files, reproduce_files }
     }
 
     pub(crate) fn write_files(&self) {
@@ -247,7 +260,7 @@ impl FileHelper {
         //暂时用test file代替一下，后续改成真正的reproduce file
         write_to_files(&self.crate_name, &reproduce_file_path, &self.reproduce_files, "replay");
     }
-
+    /*
     pub(crate) fn write_libfuzzer_files(&self) {
         let libfuzzer_dir = LIBFUZZER_FUZZ_TARGET_DIR.get(self.crate_name.as_str()).unwrap();
         let libfuzzer_path = PathBuf::from(libfuzzer_dir);
@@ -262,7 +275,7 @@ impl FileHelper {
             &self.libfuzzer_files,
             "fuzz_target",
         );
-    }
+    }*/
 }
 
 // 每个contents[i]的内容，写入文件【prefix_cratenamei.rs】

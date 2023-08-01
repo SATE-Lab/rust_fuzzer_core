@@ -65,7 +65,7 @@ pub(crate) struct ReverseApiSequence {
 }
 
 impl ReverseApiSequence {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn _new() -> Self {
         let functions = Vec::new();
         let fuzzable_params = Vec::new();
         let _using_traits = Vec::new();
@@ -86,7 +86,7 @@ impl ReverseApiSequence {
         }
     }
 
-    pub(crate) fn print_reverse_sequence(&self, api_graph: &ApiGraph<'_>) {
+    pub(crate) fn _print_reverse_sequence(&self, api_graph: &ApiGraph<'_>) {
         println!("\n!!!!!!!!!!!!!!!Start to print reverse sequence");
         for api_call in &self.functions {
             let name = &api_graph.api_functions[api_call.func.1].full_name;
@@ -144,7 +144,7 @@ impl ReverseApiSequence {
         api_sequence
     }
 
-    pub(crate) fn combine(&mut self, other: Self) -> Self {
+    pub(crate) fn _combine(&mut self, other: Self) -> Self {
         //前面和后面的序列
         let mut res = self.clone();
         let mut other_sequence = other.clone();
@@ -209,12 +209,12 @@ impl ReverseApiSequence {
     pub(crate) fn _add_dependency(&mut self, dependency: usize) {
         self._covered_dependencies.insert(dependency);
     }
-    pub(crate) fn set_unsafe(&mut self) {
+    pub(crate) fn _set_unsafe(&mut self) {
         self._unsafe_tag = true;
     }
 
     //判断这个是不是合法序列，因为可能参数不完全
-    pub(crate) fn is_ok(&self, graph: &ApiGraph<'_>) -> bool {
+    pub(crate) fn _is_ok(&self, graph: &ApiGraph<'_>) -> bool {
         for fun in &self.functions {
             if graph.api_functions[fun.func.1].inputs.len() != fun.params.len() {
                 return false;
@@ -393,7 +393,11 @@ impl ApiSequence {
     }
     //判断序列里的index函数返回值是否被move
     pub(crate) fn _is_moved(&self, index: usize) -> bool {
-        if self._moved.contains(&index) { true } else { false }
+        if self._moved.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
     //插入move
     pub(crate) fn _insert_move_index(&mut self, index: usize) {
@@ -409,7 +413,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_fuzzable_need_mut_tag(&self, index: usize) -> bool {
-        if self._fuzzable_mut_tag.contains(&index) { true } else { false }
+        if self._fuzzable_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn _insert_function_mut_tag(&mut self, index: usize) {
@@ -417,7 +425,11 @@ impl ApiSequence {
     }
 
     pub(crate) fn _is_function_need_mut_tag(&self, index: usize) -> bool {
-        if self._function_mut_tag.contains(&index) { true } else { false }
+        if self._function_mut_tag.contains(&index) {
+            true
+        } else {
+            false
+        }
     }
 
     pub(crate) fn set_unsafe(&mut self) {

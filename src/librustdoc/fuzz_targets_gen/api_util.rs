@@ -50,10 +50,10 @@ pub(crate) fn _is_generic_type(ty: &clean::Type) -> bool {
                         for generic_arg in args.iter() {
                             if let clean::GenericArg::Type(_inner_ty) = generic_arg {
                                 return true;
-                                /*
-                                if _is_generic_type(&_inner_ty) {
-                                    return true;
-                                }*/
+                                //FIXME:
+                                // if _is_generic_type(&_inner_ty) {
+                                //     return true;
+                                // }
                             }
                         }
                     }
@@ -174,7 +174,11 @@ pub(crate) fn _is_end_type(
         clean::Type::Generic(_s) => {
             //println!("generic type = {:?}", s);
             //FIXME: 泛型肯定不是它可以成为结构体
-            if support_generic { true } else { false }
+            if support_generic {
+                true
+            } else {
+                false
+            }
         }
         clean::Type::Primitive(_) => true,
         clean::Type::BareFunction(_) => false,
@@ -792,7 +796,7 @@ pub(crate) fn _copy_type(type_: &clean::Type) -> bool {
             //FIXME: 不确定，遇到再看
             return false;
         }
-        clean::Type::DynTrait(_, _) => todo!(),
+        clean::Type::DynTrait(_, _) => return false,
     }
 }
 

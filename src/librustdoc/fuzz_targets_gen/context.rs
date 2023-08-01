@@ -27,24 +27,36 @@ use rustc_data_structures::fx::FxHashSet;
 lazy_static! {
     pub static ref REAL_WORLD_CRATE: FxHashSet<String> = {
         let mut m = FxHashSet::default();
-        m.insert("url");
-        m.insert("regex");
-        m.insert("tui");
+        m.insert("hifitime");//yes
+        m.insert("url");//yes
+        m.insert("ratatui");//yes
+        m.insert("regex_automata");//yes
         m.insert("time");
-        m.insert("clap");
+        m.insert("regex");//yes
         m.insert("unicode_segmentation");
-        m.insert("chrono");
-        m.insert("byteorder");
-        m.insert("bytes");
         m.insert("csv");
-        m.insert("smallvec");
-        m.insert("indexmap");
-        m.insert("regex_automata");
-        m.insert("regex_syntax");
-        m.insert("hyper");
+        m.insert("clap");
+        m.insert("tui");
         m.insert("http");
-        m.insert("ratatui");
-        m.insert("hifitime");
+        m.insert("hyper");
+        m.insert("textwrap");
+        m.insert("serde_json");
+        m.insert("chrono");
+        m.insert("bytes");
+        m.insert("byteorder");
+        m.insert("charabia");
+        m.insert("bat");
+        m.insert("xi_core_lib");
+        m.insert("semver");
+        m.insert("winit");
+        m.insert("difference");
+        m.insert("diffy");
+        m.insert("tokio");
+        m.insert("httparse");
+        m.insert("regex_syntax");
+        m.insert("protobuf");
+        m.insert("console");
+        m.insert("unicode_normalization");
         let m = m.into_iter().map(|x| x.to_string()).collect();
         m
     };
@@ -104,12 +116,10 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
         let strs: Vec<&str> = out_dir_str.split("/").collect();
         let target_dir_name = strs[strs.len() - 2];
 
-        println!("Output dir name is {}", target_dir_name);
-
         if target_dir_name == "target" {
             // 解析corpus program
 
-            let tested_lib_name = "csv";
+            let tested_lib_name = "semver";
             let experiment_root = "/home/yxz/workspace/fuzz/experiment_root/";
 
             if !std::env::current_dir().unwrap().starts_with(experiment_root) {
@@ -128,17 +138,14 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 let extract_info = ExtractInfo::new(
                     tcx,
                     krate.name(tcx).to_string(),
-                    tested_lib_name.to_string(),
+                    tested_lib_name.to_string().replace("-", "_"),
                     &all_dependencies,
                     enable,
                 );
-                /*
-                extract_info.print_sequence(
-                    enable,
-                    "/home/yxz/workspace/fuzz/experiment_root/",
-                    "csv",
-                );*/
+
+                extract_info.print_sequence(enable, experiment_root, tested_lib_name);
                 extract_info.print_dependencies_info(enable, experiment_root, tested_lib_name);
+                extract_info.print_order_info(enable, experiment_root, tested_lib_name);
                 extract_info.print_functions_info(enable, experiment_root, tested_lib_name);
             });
 
@@ -147,18 +154,21 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
                 krate.name(tcx)
             );
         } else {
+            use std::time::Instant;
+            let start = Instant::now();
             // 解析tested lib
-            println!(
-                "\nStart to parse tested crate and generate test file.\nThe name of the tested crate is {}.",
-                krate.name(tcx)
-            );
             let kname = krate.name(tcx).to_string();
-            println!("正在解析: {}", kname);
 
             if !REAL_WORLD_CRATE.contains(&kname) {
-                println!("待测库没有这个crate");
+                println!("待测库没有这个crate {}", kname);
                 return Ok((cx, krate));
             }
+
+            println!(
+                "\nStart to parse tested crate and generate test file.\nThe name of the tested crate is {}.",
+                kname
+            );
+
             let support_generic = false;
 
             // 新建一个API依赖图
@@ -181,48 +191,135 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
 
             api_graph.find_all_dependencies(support_generic);
 
-            use crate::fuzz_targets_gen::api_graph::GraphTraverseAlgorithm::*;
-
-            /*
-            let generation_strategy = _UseRealWorld;
-            api_graph.generate_all_possoble_sequences(
-                generation_strategy,
-                krate.name(tcx).as_str().replace("_", "-").as_str(),
-            );
-            */
-            let max_num = 40;
-            let max_len = 25;
-
-            //let generation_strategy = _Bfs;
-            let generation_strategy = _UseRealWorld;
-            api_graph.generate_all_possoble_sequences(
-                generation_strategy,
-                krate.name(tcx).as_str().replace("_", "-").as_str(),
-                max_num,
-                max_len,
-                support_generic,
-            );
-
             println!("total functions in crate : {:?}", api_graph.api_functions.len());
 
-            if file_util::can_write_to_file(
-                &api_graph._crate_name.replace("_", "-"),
-                //&"unicode-segmentation".to_owned(),
-                generation_strategy,
-            ) {
-                println!("I will write test case into files");
-                //whether to use random strategy
-                let file_helper =
-                    file_util::FileHelper::new(&api_graph, generation_strategy, max_num);
-                //println!("file_helper:{:?}", file_helper);
-                file_helper.write_files();
+            use crate::fuzz_targets_gen::api_graph::GraphTraverseAlgorithm::*;
 
-                if false && file_util::can_generate_libfuzzer_target(&api_graph._crate_name) {
-                    file_helper.write_libfuzzer_files();
+            let fries = true;
+
+            let random = false;
+
+            let fudge = false;
+            let fudge_test_lib = "bat";
+
+            let max_num = 100;
+            let max_len = 15;
+
+            if fries {
+                println!(
+                    "Fries Start!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                );
+                api_graph.api_sequences.clear();
+                //let generation_strategy = _Bfs;
+                let generation_strategy = _UseRealWorld;
+                //let generation_strategy = _RandomWalk;
+                api_graph.generate_all_possoble_sequences(
+                    generation_strategy,
+                    krate.name(tcx).as_str().replace("_", "-").as_str(),
+                    max_num,
+                    max_len,
+                    support_generic,
+                );
+                // 计算经过的时间
+                let duration = start.elapsed();
+                println!("代码执行时间: {:?}", duration);
+
+                if file_util::can_write_to_file(
+                    &api_graph._crate_name.replace("_", "-"),
+                    //&"unicode-segmentation".to_owned(),
+                    generation_strategy,
+                ) {
+                    println!("I will write test case into files");
+                    //whether to use random strategy
+                    let file_helper = file_util::FileHelper::new(
+                        &api_graph,
+                        generation_strategy,
+                        max_num,
+                        max_len,
+                    );
+                    file_helper.write_files();
                 }
+
+                println!("Fries! Finish to parse tested crate and generate test file.");
             }
 
-            println!("Finish to parse tested crate and generate test file.");
+            if fudge {
+                println!(
+                    "Fudge Start!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                );
+                api_graph.api_sequences.clear();
+                let generation_strategy = _Fudge;
+                //let generation_strategy = _RandomWalk;
+                api_graph.generate_all_possoble_sequences(
+                    generation_strategy,
+                    fudge_test_lib.replace("_", "-").as_str(),
+                    //krate.name(tcx).as_str().replace("_", "-").as_str(),
+                    max_num,
+                    max_len,
+                    support_generic,
+                );
+                // 计算经过的时间
+                let duration = start.elapsed();
+                println!("代码执行时间: {:?}", duration);
+                println!("total functions in crate : {:?}", api_graph.api_functions.len());
+
+                if file_util::can_write_to_file(
+                    &api_graph._crate_name.replace("_", "-"),
+                    //&"unicode-segmentation".to_owned(),
+                    generation_strategy,
+                ) {
+                    println!("I will write test case into files");
+                    //whether to use random strategy
+                    let file_helper = file_util::FileHelper::new(
+                        &api_graph,
+                        generation_strategy,
+                        max_num,
+                        max_len,
+                    );
+                    file_helper.write_files();
+                }
+
+                println!("Fudge! Finish to parse tested crate and generate test file.");
+            }
+
+            if random {
+                println!(
+                    "Random Start!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                );
+                api_graph.api_sequences.clear();
+                let generation_strategy = _RandomWalk;
+                //let generation_strategy = _RandomWalk;
+                api_graph.generate_all_possoble_sequences(
+                    generation_strategy,
+                    krate.name(tcx).as_str().replace("_", "-").as_str(),
+                    max_num,
+                    max_len,
+                    support_generic,
+                );
+                // 计算经过的时间
+
+                println!("total functions in crate : {:?}", api_graph.api_functions.len());
+
+                if file_util::can_write_to_file(
+                    &api_graph._crate_name.replace("_", "-"),
+                    //&"unicode-segmentation".to_owned(),
+                    generation_strategy,
+                ) {
+                    println!("I will write test case into files");
+                    //whether to use random strategy
+                    let file_helper = file_util::FileHelper::new(
+                        &api_graph,
+                        generation_strategy,
+                        max_num,
+                        max_len,
+                    );
+                    file_helper.write_files();
+                }
+
+                println!("Random! Finish to parse tested crate and generate test file.");
+            }
+            let duration = start.elapsed();
+            println!("代码执行时间: {:?}", duration);
         }
         Ok((cx, krate))
     }
@@ -234,22 +331,6 @@ impl<'tcx> FormatRenderer<'tcx> for Context<'tcx> {
     fn item(&mut self, item: clean::Item) -> Result<(), Error> {
         //FIXME: 如果是函数
         let _name = item.name;
-        /*match *item.kind {
-            clean_types::ItemKind::FunctionItem(_) => {
-                let full_name = self.full_path(&item);
-                println!("Paring function item [{}]", full_name);
-
-                //开始解析函数身体
-                //let hir = self._tcx.hir();
-                //let _body = hir
-                //    .body(hir.body_owned_by(item.item_id.as_def_id().unwrap().as_local().unwrap()));
-                //println!("Body:\n{:#?}", body);
-            }
-            _ => {
-                println!("Not a function item");
-            }
-        }*/
-
         Ok(())
     }
 
