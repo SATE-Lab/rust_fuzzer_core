@@ -6,6 +6,7 @@ use crate::fuzz_targets_gen::call_type::CallType;
 use crate::fuzz_targets_gen::impl_util::FullNameMap;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 
+// 这里是一些预定义的类型，左边是path，右边是名字
 lazy_static! {
     static ref PRELUDED_TYPE: FxHashMap<&'static str, &'static str> = {
         let mut m = FxHashMap::default();
